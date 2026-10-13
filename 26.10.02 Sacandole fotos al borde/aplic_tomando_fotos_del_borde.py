@@ -105,71 +105,50 @@ posicionar_en_muestra(
 
 # %%
 
-# Barrido
+# Barrido de medición: una foto en COLOR, enfocada, en cada punto de una grilla.
+#
+# Antes de correr esta celda la platina tiene que estar ENFOCADA cerca del borde
+# que se quiere medir (con posicionar_en_muestra() en la celda de arriba, o a
+# mano). La grilla arranca en la posición actual de la platina, y el SIGNO de
+# paso_x_mm / paso_y_mm decide hacia dónde se extiende en x y en y (por ejemplo,
+# arrancar adentro de la muestra y avanzar hacia el borde).
+#
+# Cada barrido crea su propia carpeta dentro de carpeta_salida, con las fotos
+# en color, puntos.csv (posición, z_enfoque y características de cada foto) y
+# parametros.json. Después hay que repartir las fotos a mano en carpetas
+# interior / borde / vacio y usar analisis_campo_visual.resumir_calibracion().
+#
+# Los pasos no pueden pasar de 0.15 mm (regla de seguridad del eje Z).
+# (barrido_fotos_borde.py tiene que estar en la misma carpeta que este archivo)
 
-carpeta_guardado = r"C:\BackUp\Facultad\Labo 7\Fotos\PONER NOMBRE"
+from barrido_fotos_borde import barrer_fotos_borde
 
-x_abs_ini = grua.pregunta_posicion_actual()[0]
-y_abs_ini = grua.pregunta_posicion_actual()[1]
-z_abs_ini = grua.pregunta_posicion_actual()[2]
-
-grua.desp_lin_abs(x_abs_ini, y_abs_ini, z_abs_ini)
-
-time.sleep(5)
-
-# x_abs_ini = 10
-rango_x = np.arange(x_abs_ini, x_abs_ini + 8 * 0.075, 0.075)
-# rango_x= np.arange(x_abs_ini, x_abs_ini - 8 * 0.075, -0.075)
-# print(f"{rango_x}")
-rango_y = np.arange(y_abs_ini - 4 * 0.1, y_abs_ini + 4 * 0.1, 0.1)
-
-
-for y_abs in rango_y:
-
-    for x_abs in rango_x:
-
-        grua.desp_lin_abs(x_abs, y_abs, z_abs_ini)
-
-        time.sleep(0.5)
-
-        x, y, z_abs_ini = grua.pregunta_posicion_actual()
-
-        carpeta_af = carpeta_guardado / f"({x}, {y})"
-
-        mejor_z, posiciones_z, valores_metrica = autofocus(
-            cam,
-            grua,
-            laplacian_variance,
-            pasos_abajo=4,
-            pasos_arriba=4,
-            paso_z=0.0025,
-            espera_movimiento=0.5,
-            graficamos=False,
-            guardamos=True,
-            carpeta_guardado=carpeta_af
-            )
-
-        time.sleep(0.5)
+resultado = barrer_fotos_borde(
+    cam,
+    grua,
+    z_arriba_seguro=28,          # los mismos que en posicionar_en_muestra()
+    z_min_seguridad=27.5,
+    carpeta_salida=r"C:\BackUp\Facultad\Labo 7\Fotos\PONER NOMBRE",
+    nombre_barrido=None,         # None -> "barrido <fecha> (x, y)"
+    n_x=8,
+    n_y=8,
+    paso_x_mm=0.075,
+    paso_y_mm=0.100,
+    # Cámara en la foto en color (None = automático). Para comparar
+    # fraccion_rojos / saturacion_media entre fotos conviene fijarlos.
+    exposure_us=None,
+    gain_db=None,
+    whitebal=None,               # (r, g, b) en dB
+    guardar_fotos_autofoco=False,
+    # Si no es None, en los campos claros (vacíos) no se corre autofocus():
+    # evita que el Z siga ruido. Calibrar con la columna intensidad_fondo del CSV.
+    umbral_intensidad_fondo=None,
+)
 
 
-        hora_actual = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+# %%
 
-        image_data = cam.capturar()
+# Mapa del barrido: dónde quedó el borde dentro de la grilla.
+# (otras opciones: "contraste", "fraccion_rojos", "saturacion_media", "z_enfoque")
 
-
-        if x_abs == 100:
-            mostrar = True
-        
-        else:
-            mostrar = False
-
-        
-        cam.guardar_imagen(
-            image_data = image_data,
-            carpeta=carpeta_guardado,
-            nombre = f"{hora_actual} ({x_abs}, {y_abs}, {z_abs_ini})",
-            mostrar=mostrar
-        )
-        
-    rango_x = rango_x[::-1]
-
+resultado.graficar_mapa("distancia_normalizada")

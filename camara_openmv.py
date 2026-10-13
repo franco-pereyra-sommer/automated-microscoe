@@ -474,11 +474,12 @@ class OpenMVCamera:
 
     def config_autofoco_local(
         self,
+        pixformat=PixFormat.GRAYSCALE,
         exposure_us=None,
         gain_db=None,
     ):
 
-        self.set_pixformat(PixFormat.GRAYSCALE)
+        self.set_pixformat(pixformat)
         self.set_framesize(Framesize.QVGA)
         self.set_quality(100)
 
