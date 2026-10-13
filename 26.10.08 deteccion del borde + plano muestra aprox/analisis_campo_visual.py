@@ -276,7 +276,7 @@ def resumir_calibracion(rutas_por_clase, umbral=None):
 from pathlib import Path
 from collections import Counter
 
-from analisis_campo_visual import resumir_calibracion
+# from analisis_campo_visual import resumir_calibracion
 
 
 def listar_jpg(carpeta):
@@ -323,3 +323,16 @@ datos = resumir_calibracion(rutas_por_clase)
 
 
 #%%
+
+
+print(f"{datos = }")
+
+
+# %%
+
+ruta = r"C:\BackUp\Facultad\Labo 7\Fotos\26.10.08 centro masas + ajuste a un plano\plano\0024 +y (150.0, 153.45, 27.74) - 2026-10-08_13-52-43.jpg"
+
+imagen = cv2.imread(str(ruta))
+
+c = caracteristicas_borde(imagen, umbral=None)
+# %%
