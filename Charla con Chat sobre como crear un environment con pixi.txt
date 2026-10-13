@@ -1,0 +1,432 @@
+Yo tengo un proyecto de pixi ya iniciado en la carpeta C:\BackUp\Facultad\Labo 6\Codigo\Environtment parasitos
+
+en CMD, como administrador, corro:
+
+```bash
+cd C:\BackUp\Facultad\Labo 6\Codigo\Environtment parasitos
+```
+
+y después puedo agregar cualquier librerira
+
+```bash
+pixi add seaborn
+pixi add pandas
+pixi add numpy
+pixi add matplotlib
+pixi add ipykernel
+pixi add pyserial
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Necesito crear un invirontment para python. Me enseñas como se crea con pixi un environment? Ya tengo instalado pixie. 
+
+Las librerias que necesito son serial, pyserial, time, la version de python, si puede ser que sea la mas reiciente. Las versiones de las librerias que sean las que sean, no me importa
+
+__________________________________________________________________________________________
+
+Sí. Con [Pixi](https://pixi.sh?utm_source=chatgpt.com) podés crear environments de Python bastante fácil.
+Te muestro el flujo básico.
+
+## 1. Crear un proyecto Pixi
+
+En una terminal:
+
+```bash
+pixi init mi_proyecto
+```
+
+Eso crea una carpeta con un archivo `pixi.toml`.
+
+Entrás a la carpeta:
+
+```bash
+cd mi_proyecto
+```
+
+---
+
+## 2. Agregar Python
+
+Para instalar la versión más reciente disponible:
+
+```bash
+pixi add python
+```
+
+Si querés explícitamente Python 3.13 por ejemplo:
+
+```bash
+pixi add "python>=3.13"
+```
+
+---
+
+## 3. Agregar pyserial
+
+La librería correcta es:
+
+```python
+import serial
+```
+
+pero el paquete que se instala se llama:
+
+```bash
+pyserial
+```
+
+Entonces:
+
+```bash
+pixi add pyserial
+```
+
+---
+
+## 4. Sobre `time`
+
+`time` NO se instala porque viene incluido en la librería estándar de Python.
+
+O sea:
+
+```python
+import time
+```
+
+funciona automáticamente.
+
+---
+
+## 5. Ejecutar Python dentro del environment
+
+Podés abrir un shell del environment:
+
+```bash
+pixi shell
+```
+
+Y ahí:
+
+```bash
+python
+```
+
+o correr scripts:
+
+```bash
+python main.py
+```
+
+---
+
+## 6. Alternativa rápida: todo junto
+
+Podés crear todo de una:
+
+```bash
+pixi init mi_proyecto
+cd mi_proyecto
+pixi add python pyserial
+```
+
+---
+
+## 7. Cómo queda el `pixi.toml`
+
+Algo así:
+
+```toml
+[project]
+name = "mi_proyecto"
+channels = ["conda-forge"]
+platforms = ["win-64"]
+
+[dependencies]
+python = "*"
+pyserial = "*"
+```
+
+---
+
+## 8. Tu primer script
+
+`main.py`
+
+```python
+import serial
+import time
+
+print("Hola")
+
+time.sleep(1)
+
+ser = serial.Serial("COM3", 115200)
+
+ser.write(b"M115\n")
+
+respuesta = ser.readline()
+
+print(respuesta)
+```
+
+---
+
+## 9. Ejecutarlo
+
+```bash
+pixi run python main.py
+```
+
+o entrando antes al shell:
+
+```bash
+pixi shell
+python main.py
+```
+
+---
+
+## 10. Ver paquetes instalados
+
+```bash
+pixi list
+```
+
+---
+
+## 11. Borrar el environment
+
+Simplemente borrás la carpeta `.pixi`.
+
+```bash
+rm -rf .pixi
+```
+
+(en Windows la borrás normalmente o usando PowerShell)
+
+```powershell
+Remove-Item -Recurse -Force .pixi
+```
+__________________________________________________________________________________________
+__________________________________________________________________________________________
+__________________________________________________________________________________________
+__________________________________________________________________________________________
+
+Estoy usando visual studio code. Me cree el environment en System32. Donde lo tengo que crear para que me aparezca como una opcion en VSC
+__________________________________________________________________________________________
+No conviene crear el proyecto en `System32`.
+Lo normal es crear cada proyecto en su propia carpeta de trabajo, por ejemplo:
+
+```text
+C:\Users\TuUsuario\Documents\mi_proyecto
+```
+
+o
+
+```text
+D:\Python\mi_proyecto
+```
+
+---
+
+## Cómo hacer que VSCode detecte el environment de Pixi
+
+### 1. Crear una carpeta de proyecto
+
+Por ejemplo:
+
+```powershell
+mkdir C:\Users\Franco\Desktop\impresora3d
+cd C:\Users\Franco\Desktop\impresora3d
+```
+
+---
+
+### 2. Inicializar Pixi ahí
+
+```powershell
+pixi init
+pixi add python pyserial
+```
+
+Eso crea:
+
+```text
+impresora3d/
+│
+├── pixi.toml
+├── .pixi/
+└── ...
+```
+
+---
+
+### 3. Abrir ESA carpeta en VSCode
+
+Muy importante:
+
+```powershell
+code .
+```
+
+o desde VSCode:
+
+```text
+File → Open Folder
+```
+
+y elegís `impresora3d`.
+
+---
+
+### 4. Seleccionar el intérprete
+
+En VSCode:
+
+```text
+Ctrl + Shift + P
+```
+
+y escribís:
+
+```text
+Python: Select Interpreter
+```
+
+Ahí debería aparecer algo tipo:
+
+```text
+.pixi\envs\default\python.exe
+```
+
+Lo seleccionás.
+
+---
+
+## Si NO aparece automáticamente
+
+Podés seleccionarlo manualmente.
+
+El intérprete suele estar en:
+
+```text
+<tu proyecto>\.pixi\envs\default\python.exe
+```
+
+Por ejemplo:
+
+```text
+C:\Users\Franco\Desktop\impresora3d\.pixi\envs\default\python.exe
+```
+
+En VSCode:
+
+```text
+Python: Select Interpreter
+→ Enter interpreter path
+→ Browse
+```
+
+y elegís ese `python.exe`.
+
+---
+
+## Cómo verificar que funciona
+
+En la terminal integrada de VSCode:
+
+```python
+import serial
+print("ok")
+```
+
+Si no tira error, ya está bien configurado.
+
+---
+
+## Recomendación importante
+
+La estructura típica queda así:
+
+```text
+mi_proyecto/
+│
+├── main.py
+├── pixi.toml
+├── .gitignore
+└── .pixi/
+```
+
+y abrís SIEMPRE la carpeta raíz del proyecto en VSCode.
+No abras directamente `.pixi` ni `System32`.
+__________________________________________________________________________________________
+__________________________________________________________________________________________
+__________________________________________________________________________________________
+__________________________________________________________________________________________
+El environment que cree se llama "parasitos_3d" como lo borro?C:\Windows\System32\parasitos_3d>
+__________________________________________________________________________________________
+Si creaste el proyecto ahí, simplemente borrá la carpeta completa `parasitos_3d`.
+
+Desde PowerShell:
+
+```powershell id="2m3r6m"
+Remove-Item -Recurse -Force C:\Windows\System32\parasitos_3d
+```
+
+o si ya estás parado dentro de `System32`:
+
+```powershell id="2j69m3"
+Remove-Item -Recurse -Force .\parasitos_3d
+```
+
+---
+
+Desde CMD clásico:
+
+```cmd id="y9zw4s"
+rmdir /s /q C:\Windows\System32\parasitos_3d
+```
+
+---
+
+También podés borrarlo manualmente desde el Explorador de Windows:
+
+```text id="jlwm2r"
+C:\Windows\System32\
+```
+
+y eliminás la carpeta `parasitos_3d`.
+
+---
+
+Después crealo en una carpeta normal de usuario, por ejemplo:
+
+```powershell id="tw4z6u"
+mkdir C:\Users\Franco\Desktop\parasitos_3d
+cd C:\Users\Franco\Desktop\parasitos_3d
+
+pixi init
+pixi add python pyserial
+```
+
+y abrís esa carpeta con VSCode:
+
+```powershell id="06nq4d"
+code .
+```

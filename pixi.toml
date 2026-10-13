@@ -1,0 +1,19 @@
+[workspace]
+authors = ["franco-pereyra-sommer <franco_ps@live.com.ar>"]
+channels = ["conda-forge"]
+name = "env_labo7"
+platforms = ["win-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+python = "3.13.*"
+numpy = ">=2.5.2,<3"
+opencv = ">=5.0.0,<6"
+matplotlib = ">=3.11.1,<4"
+ipykernel = ">=7.3.0,<8"
+pyserial = ">=3.5,<4"
+pandas = ">=3.0.5,<4"
+seaborn = ">=0.13.2,<0.14"
+scikit-image = ">=0.26.0,<0.27"
