@@ -11,7 +11,7 @@ analisis_campo_visual.resumir_calibracion().
 
 Flujo (para cada punto de la grilla):
 
-  1) La platina se mueve al punto (pasos de <= 0.15 mm: el Z no se toca,
+  1) La platina se mueve al punto (pasos de <= 0.4 mm: el Z no se toca,
      ver más abajo).
   2) La cámara pasa a escala de grises QVGA (config_autofoco_local()) y
      autofocus() deja la platina en z_enfoque.
@@ -39,11 +39,13 @@ Qué queda guardado, dentro de  <carpeta_salida>/<nombre del barrido>/:
   - 'autofoco/': las fotos de cada autofocus() (solo si
     guardar_fotos_autofoco=True), una subcarpeta por punto.
 
-Seguridad (regla validada en el laboratorio, ver moverse_a_xy() en
-busqueda_muestra.py): parado en un z_enfoque se puede mover hasta
-~150 µm en XY sin tocar el Z. Por eso paso_x_mm y paso_y_mm no pueden
-pasar de 0.15 mm (se rechaza antes de mover nada). Si se pide un punto
-inicial a más de 150 µm de donde está la platina, el viaje sube antes a
+Seguridad (ver moverse_a_xy() en busqueda_muestra.py): parado en un
+z_enfoque se puede mover hasta 'distancia_sin_subir_mm' en XY sin tocar
+el Z. Por defecto son 0.4 mm en este barrido (busqueda_muestra usa 0.15
+mm, la distancia que se validó en el laboratorio, y sigue valiendo para
+el resto del código). Por eso paso_x_mm y paso_y_mm no pueden pasar de
+ese valor (se rechaza antes de mover nada). Si se pide un punto inicial
+a más de esa distancia de donde está la platina, el viaje sube antes a
 z_arriba_seguro, se mueve en XY y vuelve a bajar al Z donde estaba (con
 un autofocus() más ancho). La grilla entera se valida contra el
 rango de la impresora antes de empezar: la impresora ignora en silencio
@@ -80,7 +82,6 @@ from typing import Optional
 import numpy as np
 
 from busqueda_muestra import (
-    DISTANCIA_XY_SIN_SUBIR_MM,
     FUNCIONES_METRICA,
     PicoNoConfirmado,
     autofocus,
@@ -102,6 +103,12 @@ from busqueda_muestra import (
 
 PASO_MINIMO_XY_MM = 0.0125
 PASO_MINIMO_Z_MM = 0.0025
+
+# Distancia XY hasta la cual el barrido se mueve SIN subir (el Z queda en
+# el z_enfoque del campo visual anterior). Es solo para este barrido:
+# busqueda_muestra.DISTANCIA_XY_SIN_SUBIR_MM (0.15 mm) no se toca. Se
+# cambia con el parámetro 'distancia_sin_subir_mm' de barrer_fotos_borde().
+DISTANCIA_SIN_SUBIR_BARRIDO_MM = 0.4
 
 
 def _a_grilla(valor_mm, paso_minimo=PASO_MINIMO_XY_MM):
@@ -370,8 +377,8 @@ class _BarridoFotos:
     def _ir_a(self, x, y):
         """
         Lleva la platina a (x, y) con moverse_a_xy(). Si fue un viaje
-        largo (> 150 µm: la platina quedó en z_arriba_seguro, sin
-        enfocar) baja al último z_enfoque confirmado (acotado a
+        largo (> distancia_sin_subir_mm: la platina quedó en
+        z_arriba_seguro, sin enfocar) baja al último z_enfoque confirmado (acotado a
         [z_min_seguridad, z_arriba_seguro] y redondeado hacia arriba a la
         grilla de 2.5 µm). Si fue corto, el Z no se toca. Devuelve True
         si fue un viaje largo.
@@ -384,6 +391,7 @@ class _BarridoFotos:
 
         largo = moverse_a_xy(
             imp, x, y, self.z_arriba_seguro,
+            distancia_sin_subir=self.distancia_sin_subir_mm,
             feedrate_xy=self.feedrate_xy,
             espera_movimiento=self.espera_movimiento,
         )
@@ -654,6 +662,7 @@ def barrer_fotos_borde(
     calcular_caracteristicas=True,
     espera_movimiento=0.5,
     feedrate_xy=3000,
+    distancia_sin_subir_mm=DISTANCIA_SIN_SUBIR_BARRIDO_MM,
     graficar_autofoco=False,
     kwargs_autofocus=None,
     kwargs_config_autofoco=None,
@@ -673,20 +682,27 @@ def barrer_fotos_borde(
       (llamada 'nombre_barrido', o "barrido <fecha> (x, y)" si no se
       pasa), así que varios barridos pueden compartir 'carpeta_salida'.
     - n_x, n_y, paso_x_mm, paso_y_mm: la grilla. Los pasos tienen signo
-      y no pueden pasar de 0.15 mm. Lo ideal es que sean múltiplos de
-      0.0125 mm (lo que se mueve la impresora): los defaults (0.075 y
-      0.100) lo son.
+      y no pueden pasar de 'distancia_sin_subir_mm'. Lo ideal es que sean
+      múltiplos de 0.0125 mm (lo que se mueve la impresora): los
+      defaults (0.075 y 0.100) lo son.
     - x_inicial, y_inicial: esquina de arranque (i=0, j=0). Si no se
-      pasan, es la posición actual de la platina. Más lejos de 0.15 mm
-      es un viaje largo (ver el docstring del módulo).
+      pasan, es la posición actual de la platina. Más lejos que
+      'distancia_sin_subir_mm' es un viaje largo (ver el docstring del
+      módulo).
+    - distancia_sin_subir_mm: hasta qué distancia XY se mueve la platina
+      sin subir (default 0.4 mm). Pasos grandes cambian más el z de
+      enfoque entre campos vecinos (muestra inclinada): si autofocus()
+      no confirma, subir pasos_arriba_foco / pasos_abajo_foco.
     - pixformat_foto, resolucion_foto, calidad_foto: formato de la foto
       en color (default RGB565, QVGA, calidad JPEG 100).
     - exposure_us, gain_db, whitebal: parámetros FIJOS de la cámara para
       la foto en color; None = automático. Para comparar fraccion_rojos
       y saturacion_media entre fotos conviene fijarlos: el balance de
       blancos y la exposición automáticos se reajustan en cada foto y
-      cambian los colores. whitebal es una tupla (r, g, b) de ganancias
-      en dB. Al terminar el balance de blancos vuelve a automático.
+      cambian los colores. whitebal es una tupla (r, g, b) con las
+      ganancias tal como las devuelve la cámara ("info"): son 20·log10 del
+      valor del registro, así que el neutro (×1) es 60.206, no 0.
+      Al terminar el balance de blancos vuelve a automático.
     - frames_extra_descartados: fotos que se descartan después de pasar
       a color, para que el sensor se acomode (config_de_una() ya
       descarta una).
@@ -721,16 +737,19 @@ def barrer_fotos_borde(
 
     n_x, n_y = int(n_x), int(n_y)
 
+    if not distancia_sin_subir_mm > 0:
+        raise ValueError(f"distancia_sin_subir_mm tiene que ser > 0 (recibí {distancia_sin_subir_mm}).")
+
     for nombre, paso, n in (("paso_x_mm", paso_x_mm, n_x), ("paso_y_mm", paso_y_mm, n_y)):
 
         if n == 1:
             continue
 
-        if paso == 0 or abs(paso) > DISTANCIA_XY_SIN_SUBIR_MM + 1e-9:
+        if paso == 0 or abs(paso) > distancia_sin_subir_mm + 1e-9:
             raise ValueError(
                 f"{nombre} = {paso}: tiene que ser distinto de 0 y de a lo sumo "
-                f"{DISTANCIA_XY_SIN_SUBIR_MM} mm en valor absoluto (regla de "
-                f"seguridad: más lejos que eso, hay que subir antes de moverse)."
+                f"{distancia_sin_subir_mm} mm en valor absoluto (distancia_sin_subir_mm; "
+                f"regla de seguridad: más lejos que eso, hay que subir antes de moverse)."
             )
 
         multiplos = abs(paso) / PASO_MINIMO_XY_MM
@@ -786,6 +805,7 @@ def barrer_fotos_borde(
         pasos_abajo_foco_ancho=pasos_abajo_foco_ancho,
         umbral_intensidad_fondo=umbral_intensidad_fondo,
         espera_movimiento=espera_movimiento, feedrate_xy=feedrate_xy,
+        distancia_sin_subir_mm=distancia_sin_subir_mm,
         kwargs_autofocus=kwargs_autofocus, kwargs_config_autofoco=kwargs_config_autofoco,
     )
 
@@ -813,9 +833,12 @@ def barrer_fotos_borde(
         calcular_caracteristicas=calcular_caracteristicas,
         espera_movimiento=espera_movimiento,
         feedrate_xy=feedrate_xy,
+        distancia_sin_subir_mm=distancia_sin_subir_mm,
         graficar_autofoco=graficar_autofoco,
         kwargs_autofocus=kwargs_autofocus or {},
         kwargs_config_autofoco=kwargs_config_autofoco or {},
     )
 
     return barrido.correr(parametros)
+
+

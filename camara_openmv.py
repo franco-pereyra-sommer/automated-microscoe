@@ -451,9 +451,11 @@ class OpenMVCamera:
         self,
         pixformat="RGB565",
         resolucion="WQXGA2",
-        exposure_us=None,
-        gain_db=None,
-        calidad=90
+        exposure_us=None, #18000,
+        gain_db=None, #35, 
+        whitebal =None,# [66.22236, 61.43028, 60.206],
+        calidad=100,
+        skip = 2
     ):
 
         self.set_pixformat(pixformat)
@@ -470,7 +472,12 @@ class OpenMVCamera:
         else:
             self.set_gain(gain_db)
 
-        self.descartar_frames(cantidad=1)
+        if whitebal is None:
+            self.set_whitebal_auto(True)
+        else:
+            self.set_whitebal(whitebal[0], whitebal[1], whitebal[2])
+
+        self.descartar_frames(cantidad=skip)
 
     def config_autofoco_local(
         self,

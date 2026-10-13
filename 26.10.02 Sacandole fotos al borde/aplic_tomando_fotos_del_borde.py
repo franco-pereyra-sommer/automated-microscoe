@@ -58,7 +58,7 @@ cam.conectar()
 posicionar_en_muestra(
     cam,
     grua,
-    x=150,
+    x=153,
     y=150,
     z_arriba_seguro=28,
     z_min_seguridad=27.5,
@@ -87,21 +87,45 @@ posicionar_en_muestra(
     devolveme_la_respuesta=False,
 )
 
-
-# mejor_z, posiciones_z, valores_metrica = autofocus(
-#     cam,
-#     grua,
-#     tenengrad,
-#     pasos_abajo=5,
-#     pasos_arriba=5,
-#     paso_z=0.0025,
-#     espera_movimiento=1,
-#     graficamos=True,
-#     guardamos=True,
-#     carpeta_guardado=r"C:\BackUp\Facultad\Labo 7\Fotos\26.08.20 barrido mas video\Configuracion 5\Pasada 1"
-#     )
+grua.pregunta_posicion_actual()
 
 
+#%%
+
+
+
+cam.config_de_una(
+    pixformat="RGB565",
+    resolucion="QVGA",
+    exposure_us=21450,
+    gain_db=23.8,
+    whitebal=[66.22236, 61.43028, 60.206]
+)
+
+mejor_z, posiciones_z, valores_metrica = autofocus(
+    cam,
+    grua,
+    laplacian_variance,
+    pasos_abajo=5,
+    pasos_arriba=5,
+    paso_z=0.0025,
+    espera_movimiento=0.5,
+    graficamos=True,
+    guardamos=False,
+    carpeta_guardado=r"C:\BackUp\Facultad\Labo 7\Fotos\26.08.20 barrido mas video\Configuracion 5\Pasada 1"
+    )
+
+
+
+# grua.desp_lin_rel(0.1,0,0)
+# time.sleep(0.5)
+cam.mostrar(cam.capturar())
+
+
+# x, y, z = grua.pregunta_posicion_actual()
+# grua.desp_lin_rel(x, y+5, z)
+# time.sleep(0.5)
+# cam.mostrar(cam.capturar())
 
 # %%
 
@@ -123,27 +147,35 @@ posicionar_en_muestra(
 
 from barrido_fotos_borde import barrer_fotos_borde
 
+# import importlib, barrido_fotos_borde
+# importlib.reload(barrido_fotos_borde)
+
+# (np.float64(153.3), np.float64(150.0), np.float64(27.8125))
+
 resultado = barrer_fotos_borde(
     cam,
     grua,
     z_arriba_seguro=28,          # los mismos que en posicionar_en_muestra()
     z_min_seguridad=27.5,
-    carpeta_salida=r"C:\BackUp\Facultad\Labo 7\Fotos\PONER NOMBRE",
+    carpeta_salida=r"C:\BackUp\Facultad\Labo 7\Fotos\barrido cerca de un borde 4",
     nombre_barrido=None,         # None -> "barrido <fecha> (x, y)"
-    n_x=8,
+    # x_inicial=153.6,
+    # y_inicial=146.6,
+    n_x=5,
     n_y=8,
-    paso_x_mm=0.075,
-    paso_y_mm=0.100,
+    paso_x_mm=0.1,
+    paso_y_mm=-0.15,
     # Cámara en la foto en color (None = automático). Para comparar
     # fraccion_rojos / saturacion_media entre fotos conviene fijarlos.
-    exposure_us=None,
-    gain_db=None,
-    whitebal=None,               # (r, g, b) en dB
+    exposure_us=21450,
+    gain_db=23.8,
+    whitebal=[66.22236, 61.43028, 60.206],               # (r, g, b) en dB
     guardar_fotos_autofoco=False,
     # Si no es None, en los campos claros (vacíos) no se corre autofocus():
     # evita que el Z siga ruido. Calibrar con la columna intensidad_fondo del CSV.
     umbral_intensidad_fondo=None,
 )
+
 
 
 # %%

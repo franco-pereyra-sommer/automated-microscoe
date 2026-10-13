@@ -817,6 +817,9 @@ def barrido_z_mas_guardar_imagenes(
     tiempo_espera_lista = [0.5],
     cam_pixformat = ["RGB565"],
     cam_framesize = ["QVGA"],
+    cam_whitebal = [[66.22236, 61.43028, 60.206]],
+    cam_gain = [35],
+    cam_exposure = [18000],
     carpeta_guardado = None
 ):
     """
@@ -881,33 +884,43 @@ def barrido_z_mas_guardar_imagenes(
 
             for pixformat in cam_pixformat:
 
-                if pixformat is not None:
-
-                    camara.set_pixformat(pixformat)
-
                 for framesize in cam_framesize:
 
-                    camara.set_framesize(framesize) 
+                    for whitebal in cam_whitebal:
 
-                    carpeta_guardado_final = rf"{carpeta_guardado}\Pixformat {pixformat}- resolucion {framesize}"
+                        for gain in cam_gain:
 
-                    hora_actual = datetime.now().strftime(
-                        "%Y-%m-%d_%H-%M-%S"
-                    )
+                            for exposure_us in cam_exposure:
 
-                    image_data = camara.capturar()
+                                camara.config_de_una(
+                                    pixformat=pixformat,
+                                    resolucion=framesize,
+                                    exposure_us=exposure_us,
+                                    gain_db=gain, #35, 
+                                    whitebal =[whitebal[0], whitebal[1], whitebal[2]],
+                                    calidad=100,
+                                    skip = 2
+                                )
+                                
+                                carpeta_guardado_final = rf"{carpeta_guardado}\Pixformat {pixformat} - resolucion {framesize} - Gain{gain} - Exposure{exposure_us} r{whitebal[0]}-g{whitebal[1]}-b{whitebal[2]}"
 
-                    camara.guardar_imagen(
-                        image_data=image_data,
-                        carpeta=carpeta_guardado_final,
-                        nombre=f"{hora_actual} ({impresora.posicion_x}, {impresora.posicion_y}, {impresora.posicion_z})",
-                        mostrar=False
-                    )
+                                hora_actual = datetime.now().strftime(
+                                    "%Y-%m-%d_%H-%M-%S"
+                                )
 
-        numero = numero + 1 
+                                image_data = camara.capturar()
 
-    # Vuelve al punto de partida
-    impresora.desp_lin_abs(x,y,z_max)
+                                camara.guardar_imagen(
+                                    image_data=image_data,
+                                    carpeta=carpeta_guardado_final,
+                                    nombre=f"{hora_actual} ({impresora.posicion_x}, {impresora.posicion_y}, {impresora.posicion_z})",
+                                    mostrar=False
+                                )
+
+                    numero = numero + 1 
+
+                # Vuelve al punto de partida
+                impresora.desp_lin_abs(x,y,z_max)
 
 
 # Otra funcion colada que viene de claude_busqueda_muestra
