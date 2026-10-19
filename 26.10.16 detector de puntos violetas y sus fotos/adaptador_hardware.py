@@ -6,7 +6,7 @@ busqueda_muestra.py (moverse_a_xy, autofocus, bytes_a_imagen).
 Requiere que la raíz de env_labo7 esté en sys.path (como en tus otros scripts).
 
 Cómo respeta tus reglas:
-  * XY siempre por moverse_a_xy() (regla de los 0.15 mm). Si el destino está más lejos que eso,
+  * XY siempre por moverse_a_xy() (umbral DISTANCIA_XY_SIN_SUBIR_MM, hoy 0.4 mm). Si el destino está más lejos,
     se parte en saltos cortos y se reenfoca entre salto y salto, igual que hace tu barrido espiral
     tile a tile. Nunca se dispara un "viaje largo" que suba la platina y deje todo desenfocado.
   * Después de cada movimiento: time.sleep(espera_movimiento) (0.5 s, como espera_movimiento_alta
@@ -96,7 +96,7 @@ class MicroscopioCosmos:
         return float(x), float(y)
 
     def _saltos(self, x0: float, y0: float, x1: float, y1: float) -> list[tuple[float, float]]:
-        """Puntos intermedios (sobre la grilla de 12.5 µm) tales que cada salto mida <= 0.15 mm,
+        """Puntos intermedios (sobre la grilla de 12.5 µm) tales que cada salto mida <= DISTANCIA_XY_SIN_SUBIR_MM,
         contando el redondeo a la grilla, para que moverse_a_xy() nunca lo trate como viaje largo."""
         distancia = math.hypot(x1 - x0, y1 - y0)
         if distancia < PASO_MM / 2:
@@ -125,7 +125,7 @@ class MicroscopioCosmos:
         for k, (xk, yk) in enumerate(saltos):
             viaje_largo = moverse_a_xy(self.impresora, xk, yk, self.z_arriba_seguro,
                                        feedrate_xy=self.feedrate_xy, espera_movimiento=self.espera_movimiento)
-            if viaje_largo:   # no debería pasar: los saltos son <= 0.15 mm
+            if viaje_largo:   # no debería pasar: los saltos son <= DISTANCIA_XY_SIN_SUBIR_MM
                 raise RuntimeError(f"moverse_a_xy() lo trató como viaje largo yendo a ({xk}, {yk}); "
                                    "la platina quedó levantada y sin enfocar.")
             xr, yr = self.posicion_mm()

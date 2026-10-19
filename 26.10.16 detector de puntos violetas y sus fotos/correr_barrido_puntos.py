@@ -30,7 +30,7 @@ from deteccion_puntos import DetectorColor, ParametrosColor, dibujar_detecciones
 
 #%% PARÁMETROS (ajustar)
 
-CARPETA_SALIDA = r"C:\BackUp\Facultad\Labo 7\Fotos\26.10.16 puntos violetas"
+CARPETA_SALIDA = r"C:\BackUp\Facultad\Labo 7\Fotos\26.10.20 puntos violetas"
 
 X_INI, Y_INI = 150, 153                         # donde arranca el barrido
 Z_ARRIBA_SEGURO, Z_MIN_SEGURIDAD = 27.9, 27.5   # los mismos que en posicionar_en_muestra()
@@ -97,7 +97,7 @@ micro.enfocar()
 imagen = micro.capturar_campo()
 
 detector = DetectorColor(PARAMETROS_COLOR)
-detecciones = detector.detectar(imagen)
+detecciones = detector.detectar(imagen) # Pone a la camara en RGB565 y QVGA
 
 for d in detecciones:
     print(f"centro (col={d.col:.1f}, fila={d.fila:.1f})  diámetro {d.diametro_px:.1f} px  "
@@ -107,9 +107,14 @@ plt.imshow(cv2.cvtColor(dibujar_detecciones(imagen, detecciones), cv2.COLOR_BGR2
 plt.title(f"{len(detecciones)} detección(es); cruz blanca = centro de la imagen")
 plt.show()
 
+
+#%%
+
+
 # Para calibrar los umbrales con calibrar_detector.py: guardar campos CON punto en una carpeta y SIN punto en otra.
 # (cambiar 'con_punto' por 'sin_punto' según lo que se ve en este campo)
 carpeta_calibracion = Path(CARPETA_SALIDA) / "calibracion" / "con_punto"
+# carpeta_calibracion = Path(CARPETA_SALIDA) / "calibracion" / "sin_punto"
 carpeta_calibracion.mkdir(parents=True, exist_ok=True)
 cv2.imwrite(str(carpeta_calibracion / f"{datetime.now():%Y-%m-%d_%H-%M-%S}.png"), imagen)
 

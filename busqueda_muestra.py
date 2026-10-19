@@ -1264,7 +1264,8 @@ def foco_final_multimetrica(
 # ============================================================
 #
 # Regla de seguridad (validada en el laboratorio): parado en el
-# z_enfoque de un campo visual, un desplazamiento XY corto (~150 µm)
+# z_enfoque de un campo visual, un desplazamiento XY corto (hasta
+# DISTANCIA_XY_SIN_SUBIR_MM, hoy 0.4 mm)
 # no choca con la muestra, aunque esté inclinada (se supone que no
 # demasiado). Para distancias mayores ya no se puede asegurar eso: una
 # pendiente que sube puede quedar en el camino del objetivo (distancia
@@ -1275,8 +1276,11 @@ def foco_final_multimetrica(
 #
 # Todo código nuevo que se mueva en XY entre campos visuales tiene que
 # pasar por moverse_a_xy() en vez de llamar a desp_lin_abs() a mano.
+#
+# Historia del umbral: la regla se validó en el laboratorio con desplazamientos
+# de ~150 µm (0.15 mm). El 2026-10-15 se subió a 0.4 mm a pedido de Franco.
 
-DISTANCIA_XY_SIN_SUBIR_MM = 0.15
+DISTANCIA_XY_SIN_SUBIR_MM = 0.4
 
 
 def moverse_a_xy(
@@ -1292,7 +1296,7 @@ def moverse_a_xy(
     """
     Lleva la platina a (x, y) aplicando la regla de arriba.
 
-    - Distancia XY <= 'distancia_sin_subir' (default 0.15 mm): se
+    - Distancia XY <= 'distancia_sin_subir' (default 0.4 mm): se
       mueve en XY manteniendo el Z actual (que es el z_enfoque del
       campo visual donde está parado).
     - Distancia mayor: si el Z actual es menor que 'z_seguro', primero

@@ -21,6 +21,7 @@ import io
 import time
 from datetime import datetime
 from pathlib import Path
+import re
 
 import numpy as np
 import serial
@@ -331,43 +332,66 @@ class OpenMVCamera:
     # INFORMACIÓN
     # ======================================================
 
+    # def info_vieja(self):
+
+    #     self._check_connection()
+
+    #     self.ser.reset_input_buffer()
+
+    #     self.ser.write(b"info\n")
+
+    #     line = self.ser.readline().decode(
+    #         errors="ignore"
+    #     ).strip()
+
+    #     if not line:
+    #         raise Exception(
+    #             "No se recibió información de la cámara"
+    #         )
+
+    #     values = line.split()
+
+    #     if len(values) != 3:
+    #         raise Exception(
+    #             f"Respuesta inesperada: {line!r}"
+    #         )
+
+    #     exposure_us = int(values[0])
+    #     gain_db = float(values[1])
+
+    #     rgb_gain_db = (
+    #         float(values[2].strip("()").split(",")[0]),
+    #         float(values[2].strip("()").split(",")[1]),
+    #         float(values[2].strip("()").split(",")[2])
+    #     )
+
+    #     return {
+    #         "exposure_us": exposure_us,
+    #         "gain_db": gain_db,
+    #         "rgb_gain_db": rgb_gain_db
+    #     }
+
+
     def info(self):
-
         self._check_connection()
-
         self.ser.reset_input_buffer()
-
         self.ser.write(b"info\n")
 
-        line = self.ser.readline().decode(
-            errors="ignore"
-        ).strip()
+        linea = self.ser.readline().decode(errors="ignore").strip()
 
-        if not line:
-            raise Exception(
-                "No se recibió información de la cámara"
-            )
+        if not linea:
+            raise Exception("No se recibió información de la cámara")
 
-        values = line.split()
+        # Extrae todos los enteros/flotantes ignorando comas y paréntesis
+        numeros = [float(x) for x in re.findall(r"[-\d.]+", linea)]
 
-        if len(values) != 3:
-            raise Exception(
-                f"Respuesta inesperada: {line!r}"
-            )
-
-        exposure_us = int(values[0])
-        gain_db = float(values[1])
-
-        rgb_gain_db = (
-            float(values[2].strip("()").split(",")[0]),
-            float(values[2].strip("()").split(",")[1]),
-            float(values[2].strip("()").split(",")[2])
-        )
+        if len(numeros) != 5:
+            raise Exception(f"Respuesta inesperada de OpenMV: {linea!r}")
 
         return {
-            "exposure_us": exposure_us,
-            "gain_db": gain_db,
-            "rgb_gain_db": rgb_gain_db
+            "exposure_us": int(numeros[0]),
+            "gain_db": numeros[1],
+            "rgb_gain_db": (numeros[2], numeros[3], numeros[4])
         }
 
     # ======================================================
@@ -451,8 +475,8 @@ class OpenMVCamera:
         self,
         pixformat="RGB565",
         resolucion="WQXGA2",
-        exposure_us=None, #18000,
-        gain_db=None, #35, 
+        exposure_us=None, #18000, 50000
+        gain_db=None, #35, 25
         whitebal =None,# [66.22236, 61.43028, 60.206],
         calidad=100,
         skip = 2

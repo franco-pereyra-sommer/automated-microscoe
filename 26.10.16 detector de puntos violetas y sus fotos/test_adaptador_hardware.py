@@ -34,6 +34,7 @@ except ImportError:                       # sin pyserial: módulo mínimo para p
     sys.modules["serial"] = serial
 
 from adaptador_hardware import MicroscopioCosmos
+from busqueda_muestra import DISTANCIA_XY_SIN_SUBIR_MM as LIMITE_SALTO
 from barrido_puntos import ConfigBarrido, barrer, campos_espiral
 from camara_openmv import OpenMVCamera
 from centrado import PASO_MM, Calibracion, a_pasos
@@ -171,25 +172,42 @@ def test_saltos():
             pts = micro._saltos(150.0, 150.0, x1, y1)
             previo = (150.0, 150.0)
             for p in pts:
-                assert math.hypot(p[0] - previo[0], p[1] - previo[1]) <= 0.15, (previo, p)
+                assert math.hypot(p[0] - previo[0], p[1] - previo[1]) <= LIMITE_SALTO, (previo, p)
                 previo = p
             assert not pts or pts[-1] == (x1, y1)
-    print("ok  saltos cortos (<= 0.15 mm, terminan exactamente en el destino)")
+    print(f"ok  saltos cortos (<= {LIMITE_SALTO} mm, terminan exactamente en el destino)")
 
 
 def test_mover_y_gcode():
     with tempfile.TemporaryDirectory() as t:
         micro, grua, serie, cam, sim = armar(t, [], NOMINAL)
         micro.autofoco = False
+
+        def ordenes_xy():
+            return sum(1 for l in serie.log if l.startswith("G1 X") and " Y" in l)
+
+        # 1) destino a menos del límite: UN solo salto
         with mock.patch("time.sleep"):
-            micro.mover_a(150.1125, 150.2875)        # dista 0.31 mm: hay que partirlo en 3 saltos de <= 0.15 mm
-        assert micro.posicion_mm() == (150.1125, 150.2875), micro.posicion_mm()
-        assert (sim.ix, sim.iy) == (a_pasos(150.1125), a_pasos(150.2875))     # la platina quedó donde se pidió
+            micro.mover_a(150.1125, 150.2125)            # dista ~0.24 mm
+        assert math.hypot(0.1125, 0.2125) < LIMITE_SALTO
+        assert micro.posicion_mm() == (150.1125, 150.2125), micro.posicion_mm()
+        assert ordenes_xy() == 1, ordenes_xy()
+
+        # 2) destino más allá del límite: varios saltos, posición exacta en la grilla y Z sin subir
+        antes = ordenes_xy()
+        x1, y1 = 150.5, 150.6
+        dist = math.hypot(x1 - 150.1125, y1 - 150.2125)
+        assert dist > LIMITE_SALTO
+        with mock.patch("time.sleep"):
+            micro.mover_a(x1, y1)
+        assert micro.posicion_mm() == (x1, y1), micro.posicion_mm()
+        assert (sim.ix, sim.iy) == (a_pasos(x1), a_pasos(y1))      # la platina quedó donde se pidió
+        n_saltos = ordenes_xy() - antes
+        assert n_saltos >= math.ceil(dist / LIMITE_SALTO), n_saltos
         zs = [float(l.split("Z")[1].split()[0]) for l in serie.log if l.startswith("G1") and " Z" in l]
         assert max(zs) <= Z0 + 1e-9, "no debería haber subido a la altura de viaje"
-        n_xy = sum(1 for l in serie.log if l.startswith("G1 X") and " Y" in l)
-        assert n_xy >= 2
-    print(f"ok  mover_a: {n_xy} órdenes XY, posición exacta en grilla, Z sin subir")
+    print(f"ok  mover_a: 1 orden XY para 0.24 mm; {n_saltos} para {dist:.2f} mm (límite {LIMITE_SALTO} mm); "
+          "posición exacta en grilla, Z sin subir")
 
 
 def test_calibrar_escala_con_adaptador():
