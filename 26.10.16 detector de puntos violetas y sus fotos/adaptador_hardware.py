@@ -69,10 +69,12 @@ class MicroscopioCosmos:
         self.enfocar_entre_saltos = enfocar_entre_saltos
         self.autofocos_fallidos = 0
         self._modo: str | None = None     # "campo" | "foto": evita reconfigurar la cámara si no cambió
+        self._forma_campo: tuple[int, int] | None = None   # (alto, ancho) de la última imagen de búsqueda bien configurada
 
     # ------------------------------------------------------------------ cámara
     def invalidar_modo(self) -> None:
-        """Llamalo si tocás la configuración de la cámara a mano: fuerza a reconfigurar en la próxima captura."""
+        """Llamalo si tocás la configuración de la cámara a mano (posicionar_en_muestra, foco_final_multimetrica,
+        cam.config_de_una(), ...): fuerza a reconfigurar en la próxima captura. barrer() lo llama solo al empezar."""
         self._modo = None
 
     def _asegurar_modo(self, modo: str) -> None:
@@ -81,6 +83,7 @@ class MicroscopioCosmos:
         if modo == "campo":
             self.camara.config_de_una(pixformat=self.pixformat_campo, resolucion=self.resolucion_campo,
                                       **self.kwargs_campo)
+            self._forma_campo = None
         elif modo == "foto":
             self.camara.config_de_una(pixformat=self.pixformat_foto, resolucion=self.resolucion_foto,
                                       **self.kwargs_foto)
@@ -151,12 +154,30 @@ class MicroscopioCosmos:
             self.autofocos_fallidos += 1
             print(f"[AVISO] Autofoco sin pico confirmado en {self.posicion_mm()}; sigo con el Z actual. ({e})")
 
-    def capturar_campo(self):
-        """Imagen BGR de la búsqueda (QVGA a color)."""
+    def _capturar_campo_bgr(self):
         self._asegurar_modo("campo")
         imagen = bytes_a_imagen(self.camara.capturar())
         if imagen.ndim != 3:
             raise ValueError("El detector de color necesita una imagen a color: usá pixformat_campo='RGB565'.")
+        return imagen
+
+    def capturar_campo(self):
+        """Imagen BGR de la búsqueda (QVGA a color).
+
+        Si el tamaño no coincide con el de las capturas anteriores, es que alguien cambió la cámara por fuera del
+        adaptador (típico: volver a correr foco_final_multimetrica, que termina en alta resolución, sin crear de nuevo
+        el adaptador): se reconfigura y se captura otra vez, en vez de pasarle al detector una foto de 5 MP."""
+        imagen = self._capturar_campo_bgr()
+        if self._forma_campo is None:
+            self._forma_campo = imagen.shape[:2]
+        elif imagen.shape[:2] != self._forma_campo:
+            esperada = self._forma_campo
+            self.invalidar_modo()
+            imagen = self._capturar_campo_bgr()        # (reconfigura la cámara y borra self._forma_campo)
+            if imagen.shape[:2] != esperada:
+                raise RuntimeError(f"La imagen de búsqueda mide {imagen.shape[:2]} y antes medía {esperada}, "
+                                   f"incluso después de reconfigurar la cámara ({self.resolucion_campo}).")
+            self._forma_campo = esperada
         return imagen
 
     def capturar_foto(self, nombre: str) -> str:

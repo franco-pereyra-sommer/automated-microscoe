@@ -258,9 +258,40 @@ def test_barrido_con_hardware_falso():
               f"cambios de configuración de cámara={cambios}, capturas={len(cam.capturas)}")
 
 
+def test_camara_tocada_por_fuera():
+    """Se volvió a correr foco_final_multimetrica (que deja la cámara en alta resolución) sin recrear el adaptador:
+    antes el detector recibía una foto de 5 MP ("mascara_fija (240, 320) no coincide con la imagen (1944, 2592)")."""
+    from deteccion_contraste import DetectorContraste, ParametrosContraste
+    puntos = [(150.0 + x / 1000, 150.0 + y / 1000) for x, y in [(30, 50), (-120, -80)]]
+    det = lambda: DetectorContraste(ParametrosContraste(area_min_px=15), np.zeros((240, 320), bool))
+    # 1) barrer() reconfigura la cámara al empezar
+    with tempfile.TemporaryDirectory() as t:
+        micro, grua, serie, cam, sim = armar(t, puntos, NOMINAL)
+        micro.autofoco = False
+        assert micro.capturar_campo().shape[:2] == (240, 320)
+        cam.config_de_una(pixformat="RGB565", resolucion="WQXGA2")          # a espaldas del adaptador
+        cfg = ConfigBarrido(carpeta_salida=str(Path(t) / "salida"))
+        with mock.patch("time.sleep"):
+            res, _ = barrer(micro, det(), NOMINAL, list(campos_espiral(150.0, 150.0, 0.107, 0.143, n_radial=1)), cfg,
+                            log=lambda *_: None)
+        assert res.fotos == len(puntos), res
+    # 2) aunque no se pase por barrer(): capturar_campo() detecta el tamaño distinto y se corrige sola
+    with tempfile.TemporaryDirectory() as t:
+        micro, grua, serie, cam, sim = armar(t, puntos, NOMINAL)
+        micro.autofoco = False
+        assert micro.capturar_campo().shape[:2] == (240, 320)
+        cam.config_de_una(pixformat="RGB565", resolucion="WQXGA2")
+        assert micro.capturar_campo().shape[:2] == (240, 320)
+        assert micro.capturar_campo().shape[:2] == (240, 320)
+        cambios = sum(c.startswith("set_framesize") for c in cam.comandos)
+        assert cambios == 3, cam.comandos                                   # QVGA, WQXGA2 (a mano), QVGA otra vez
+    print("ok  cámara reconfigurada por fuera del adaptador: el barrido y capturar_campo() vuelven a QVGA solos")
+
+
 if __name__ == "__main__":
     test_saltos()
     test_mover_y_gcode()
     test_calibrar_escala_con_adaptador()
     test_barrido_con_hardware_falso()
+    test_camara_tocada_por_fuera()
     print("\nTodas las pruebas del adaptador pasaron.")

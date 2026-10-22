@@ -156,7 +156,13 @@ CRITERIOS_POR_DEFECTO = {
     "laplacian": 12,
     "tenengrad": 200,
     "varianza": 30,
-}
+} # Por alguna razon dejo de valer
+
+# CRITERIOS_POR_DEFECTO = {
+#     "laplacian": 6.35,
+#     "tenengrad": 70,
+#     "varianza": 10.35,
+# }
 
 
 # ============================================================
@@ -957,7 +963,7 @@ def foco_final_multimetrica(
     pasos_abajo=10,
     vecinos_para_confirmar=3,
     pasos_extension_maxima=5,
-    espera_movimiento=0.3,
+    espera_movimiento=0.5,
     resolucion_grayscale="QVGA",
     pixformat_color="RGB565",
     resolucion_color="WQXGA2",  # alias: "4K"
@@ -992,13 +998,47 @@ def foco_final_multimetrica(
     menos), se saca una sola foto para ese grupo y se la etiqueta con
     todas las métricas que coinciden, en vez de repetir la foto.
 
+    Si 'guardamos' es True, además de esa foto del máximo:
+
+      - Se guardan, también en 'pixformat_color'/'resolucion_color',
+        las fotos de las alturas vecinas: las 'vecinos_para_confirmar'
+        alturas (de a 'paso_z') de cada lado del máximo de cada métrica,
+        o sea las mismas que miró el criterio de confirmación. Con
+        vecinos_para_confirmar = 3 son como mínimo 7 fotos (el máximo y 3
+        a cada lado); son más si los máximos de las métricas no
+        coinciden. Cada altura se fotografía una sola vez aunque las
+        ventanas de dos métricas se pisen, de abajo hacia arriba. Las
+        alturas que cruzarían 'z_min_seguridad' o 'z_max_seguro' se
+        omiten (con un aviso).
+      - Se guarda el gráfico de las tres métricas (el mismo que se
+        muestra con 'graficamos') como PNG, en la misma carpeta.
+
+    Nombres de archivo (la x, y, z son las de la platina en la foto):
+        foto del máximo: "<métricas> (x, y, z)"   (igual que siempre)
+        foto vecina:     "<métricas> vecino +k (x, y, z)"
+        gráfico:         "plot metricas (x, y, z)", con la z de donde
+                         arrancó la función.
+    k es la cantidad de pasos de 'paso_z' respecto de la foto del máximo
+    (positivo = más arriba, o sea más lejos de la muestra). Si una altura
+    vecina de un grupo coincide con la de otro grupo, queda con el nombre
+    del grupo al que le queda más cerca (el máximo, si es uno).
+
+    Al terminar, la platina queda donde la dejaba siempre esta función:
+    en el máximo del último grupo (el de Z más alto).
+
     Devuelve:
         {
-            "laplacian": {"z": ..., "valor": ..., "confirmado": bool, "archivo": Path | None},
+            "laplacian": {
+                "z": ..., "valor": ..., "confirmado": bool,
+                "indice_en_barrido": int,   # posición de su máximo en posiciones_z
+                "archivo": Path | None,     # la foto del máximo (del grupo)
+                "archivos_ventana": [Path, ...],  # fotos de sus vecinos y del máximo, de abajo hacia arriba
+            },
             "tenengrad": {...},
             "varianza":  {...},
             "posiciones_z": [...],          # el barrido GRAYSCALE completo
             "valores_por_metrica": {...},   # idem, las 3 listas
+            "archivo_plot": Path | None,    # el gráfico guardado
         }
     """
 
@@ -1167,42 +1207,121 @@ def foco_final_multimetrica(
             "z": posiciones_z[indx_max],
             "valor": valores[indx_max],
             "confirmado": confirmada,
+            "indice_en_barrido": indx_max,
             "archivo": None,
+            "archivos_ventana": [],
         }
 
     # --------------------------------------------------------
-    # Fotos en alta calidad en cada máximo (agrupando coincidencias)
+    # Fotos en alta calidad (color, 'resolucion_color')
+    #
+    # Las alturas se arman sobre la grilla del barrido (múltiplos de
+    # paso_z a partir de posiciones_z[0]; 'j' es el índice entero de la
+    # altura) y se fotografían UNA sola vez cada una, de abajo hacia
+    # arriba, aunque las ventanas de vecinos de dos grupos se pisen.
     # --------------------------------------------------------
 
     grupos = _agrupar_maximos_por_z(resultados_por_metrica, tolerancia_z=paso_z)
 
-    for grupo in grupos:
+    z_ref = posiciones_z[0]
+
+    def _z_de_indice(j):
+        return float(np.round(z_ref + j * paso_z, 4))
+
+    # plan[j] = {"grupo": índice en 'grupos', "k": pasos respecto del
+    # máximo del grupo}; k == 0 es la foto del máximo.
+    plan = {}
+
+    for g, grupo in enumerate(grupos):
+
+        # La altura de siempre: desp_lin_rel() redondea hacia abajo al
+        # múltiplo de la resolución del eje (el Z promedio del grupo puede
+        # caer entre dos alturas del barrido).
+        grupo["j"] = int(np.floor((grupo["z"] - z_ref) / paso_z + 1e-6))
+
+        plan[grupo["j"]] = {"grupo": g, "k": 0}
+
+    alturas_omitidas = []
+
+    if guardamos:
+
+        for g, grupo in enumerate(grupos):
+
+            indices = [
+                resultados_por_metrica[nombre_metrica]["indice_en_barrido"]
+                for nombre_metrica in grupo["metricas"]
+            ]
+
+            for j in range(
+                min(indices) - vecinos_para_confirmar,
+                max(indices) + vecinos_para_confirmar + 1,
+            ):
+
+                z_j = _z_de_indice(j)
+
+                if (
+                    (z_min_seguridad is not None and z_j < z_min_seguridad - 1e-9)
+                    or (z_max_seguro is not None and z_j > z_max_seguro + 1e-9)
+                ):
+                    alturas_omitidas.append(z_j)
+                    continue
+
+                k = j - grupo["j"]
+                previo = plan.get(j)
+
+                # Un máximo nunca se pisa; entre vecinos gana el más cercano.
+                if previo is None or (previo["k"] != 0 and abs(k) < abs(previo["k"])):
+                    plan[j] = {"grupo": g, "k": k}
+
+    if alturas_omitidas:
+        alturas_omitidas = sorted(set(alturas_omitidas))
+        print(
+            f"[foco_final_multimetrica] Aviso: se omiten {len(alturas_omitidas)} "
+            f"alturas vecinas por salirse de [z_min_seguridad, z_max_seguro]: "
+            f"{alturas_omitidas}"
+        )
+
+    camara.config_de_una(pixformat=pixformat_color, resolucion=resolucion_color)
+
+    archivos_por_indice = {}
+
+    for j in sorted(plan):
 
         _, _, z_actual = impresora.pregunta_posicion_actual()
-        impresora.desp_lin_rel(0, 0, grupo["z"] - z_actual)
-        time.sleep(espera_movimiento)
 
-        camara.config_de_una(pixformat=pixformat_color, resolucion=resolucion_color)
+        desplazamiento = _z_de_indice(j) - z_actual
+
+        if abs(desplazamiento) > 1e-9:
+            impresora.desp_lin_rel(0, 0, desplazamiento)
+            time.sleep(espera_movimiento)
 
         image_data = camara.capturar()
 
-        etiqueta_metricas = "+".join(grupo["metricas"])
+        rol = plan[j]
+        etiqueta_metricas = "+".join(grupos[rol["grupo"]]["metricas"])
+        k = rol["k"]
+
+        posicion = (
+            f"({np.round(impresora.posicion_x, 4)}, "
+            f"{np.round(impresora.posicion_y, 4)}, "
+            f"{np.round(impresora.posicion_z, 4)})"
+        )
+
+        if k == 0:
+            nombre = f"{etiqueta_metricas} {posicion}"
+            descripcion = f"para: {etiqueta_metricas}"
+        else:
+            nombre = f"{etiqueta_metricas} vecino {k:+d} {posicion}"
+            descripcion = f"vecino {k:+d} de: {etiqueta_metricas}"
 
         print(
             f"[foco_final_multimetrica] Foto en Z = "
-            f"{impresora.posicion_z:.4f} mm para: {etiqueta_metricas}"
+            f"{impresora.posicion_z:.4f} mm {descripcion}"
         )
 
         archivo = None
 
         if guardamos:
-
-            nombre = (
-                f"{etiqueta_metricas} "
-                f"({np.round(impresora.posicion_x, 4)}, "
-                f"{np.round(impresora.posicion_y, 4)}, "
-                f"{np.round(impresora.posicion_z, 4)})"
-            )
 
             archivo = camara.guardar_imagen(
                 image_data=image_data,
@@ -1211,27 +1330,58 @@ def foco_final_multimetrica(
                 mostrar=False,
             )
 
+        archivos_por_indice[j] = archivo
+
+    # Con las fotos de los vecinos la platina termina más arriba que el
+    # máximo del último grupo: se la devuelve ahí, que es donde esta
+    # función la dejaba antes de guardar los vecinos.
+    _, _, z_actual = impresora.pregunta_posicion_actual()
+
+    desplazamiento = _z_de_indice(grupos[-1]["j"]) - z_actual
+
+    if abs(desplazamiento) > 1e-9:
+        impresora.desp_lin_rel(0, 0, desplazamiento)
+        time.sleep(espera_movimiento)
+
+    for grupo in grupos:
+
         for nombre_metrica in grupo["metricas"]:
-            resultados_por_metrica[nombre_metrica]["archivo"] = archivo
+
+            datos = resultados_por_metrica[nombre_metrica]
+            indice = datos["indice_en_barrido"]
+
+            datos["archivo"] = archivos_por_indice.get(grupo["j"])
+
+            datos["archivos_ventana"] = [
+                archivos_por_indice[j]
+                for j in range(
+                    indice - vecinos_para_confirmar,
+                    indice + vecinos_para_confirmar + 1,
+                )
+                if archivos_por_indice.get(j) is not None
+            ]
 
     # --------------------------------------------------------
     # Gráfico: las tres métricas comparten el mismo eje Z, porque
-    # salieron del mismo barrido
+    # salieron del mismo barrido. Se muestra ('graficamos') y/o se
+    # guarda como PNG ('guardamos'), con el mismo contenido.
     # --------------------------------------------------------
 
-    if graficamos:
+    archivo_plot = None
+
+    if graficamos or guardamos:
 
         fig, ax = plt.subplots()
 
         for nombre, valores in valores_por_metrica.items():
 
-            ax.plot(posiciones_z, valores, marker="o", label=nombre)
+            ax.plot(posiciones_z, valores/np.max(valores), marker="o", label=nombre)
 
             datos = resultados_por_metrica[nombre]
 
             ax.scatter(
                 datos["z"],
-                datos["valor"],
+                1,#datos["valor"],
                 s=100,
                 zorder=5,
                 marker="*" if datos["confirmado"] else "x",
@@ -1251,10 +1401,30 @@ def foco_final_multimetrica(
         ax.grid()
         ax.legend()
 
-        plt.show()
+        if guardamos:
+
+            # Antes de plt.show(): en algunos backends show() destruye la figura.
+            carpeta_plot = Path(carpeta_guardado)
+            carpeta_plot.mkdir(parents=True, exist_ok=True)
+
+            archivo_plot = carpeta_plot / (
+                f"plot metricas ({np.round(impresora.posicion_x, 4)}, "
+                f"{np.round(impresora.posicion_y, 4)}, "
+                f"{np.round(z_inicial, 4)}).png"
+            )
+
+            fig.savefig(archivo_plot, dpi=150, bbox_inches="tight")
+
+            print(f"[foco_final_multimetrica] Gráfico guardado en:\n{archivo_plot}")
+
+        if graficamos:
+            plt.show()
+        else:
+            plt.close(fig)
 
     resultados_por_metrica["posiciones_z"] = posiciones_z
     resultados_por_metrica["valores_por_metrica"] = valores_por_metrica
+    resultados_por_metrica["archivo_plot"] = archivo_plot
 
     return resultados_por_metrica
 
@@ -1398,7 +1568,9 @@ def posicionar_en_muestra(
     una sola métrica, en una subcarpeta nombrada con la posición
     donde arranca ese foco final: "(x, y, z)"; en el modo
     multimétrica, directamente ahí, nombradas con la/s métrica/s que
-    confirman cada foto.
+    confirman cada foto; además de las fotos de los máximos se guardan
+    las de sus alturas vecinas y el gráfico de las tres métricas (ver
+    foco_final_multimetrica()).
     """
 
     if resolucion_local is None:

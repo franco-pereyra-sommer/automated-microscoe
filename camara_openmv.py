@@ -475,13 +475,17 @@ class OpenMVCamera:
         self,
         pixformat="RGB565",
         resolucion="WQXGA2",
-        exposure_us=None, #18000, 50000
-        gain_db=None, #35, 25
-        whitebal =None,# [66.22236, 61.43028, 60.206],
+        exposure_us: float | None = None, #50000,
+        gain_db: int | None = None, #25,
+        whitebal: tuple[float, float, float] | None = None, #(66.22236, 61.43028, 60.206),
         calidad=100,
-        skip = 2
+        skip: int = 2,
     ):
-
+        '''
+        exposure_us = 50000,
+        gain_db = 25,
+        whitebal = [66.22236, 61.43028, 60.206]
+        '''
         self.set_pixformat(pixformat)
         self.set_framesize(resolucion)
         self.set_quality(calidad)

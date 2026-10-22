@@ -58,8 +58,8 @@ cam.conectar()
 posicionar_en_muestra(
     cam,
     grua,
-    x=153,
-    y=150,
+    x=151.5,
+    y=150.5,
     z_arriba_seguro=28,
     z_min_seguridad=27.5,
     resolucion_global="QVGA",
@@ -67,7 +67,11 @@ posicionar_en_muestra(
     pixformat_global="GRAYSCALE",
     paso_grueso=0.005,
     paso_fino=0.0025,
-    criterios_deteccion=None,
+    criterios_deteccion={
+    "laplacian": 12.5,
+    "tenengrad": 240, #200,
+    "varianza": 80,#670,
+},
     margen_confirmacion=0.15,
     pasos_confirmacion=6,
     verificar_presencia=False,
@@ -76,7 +80,7 @@ posicionar_en_muestra(
     feedrate_xy=3000,
     espera_movimiento=0.5,
     hacer_foco_final=True,
-    metrica_foco_final=laplacian_variance,
+    metrica_foco_final=tenengrad,
     pasos_arriba_foco_final=5,
     pasos_abajo_foco_final=5,
     guardar_fotos_foco_final=False,
@@ -127,6 +131,33 @@ cam.mostrar(cam.capturar())
 # time.sleep(0.5)
 # cam.mostrar(cam.capturar())
 
+
+#%%
+
+
+CARPETA_SALIDA = r"C:\BackUp\Facultad\Labo 7\Fotos\26.10.20"
+Z_ARRIBA_SEGURO, Z_MIN_SEGURIDAD = 27.9, 27.4   # los mismos que en posicionar_en_muestra()
+
+foco_final_multimetrica(
+    cam,
+    grua,
+    z_min_seguridad=Z_MIN_SEGURIDAD,
+    z_max_seguro=Z_ARRIBA_SEGURO,
+    paso_z=0.0025,
+    pasos_arriba=10,
+    pasos_abajo=10,
+    vecinos_para_confirmar=3,
+    pasos_extension_maxima=5,
+    espera_movimiento=0.5,
+    resolucion_grayscale="QVGA",
+    pixformat_color="RGB565",
+    resolucion_color="QVGA",  # alias: "4K"
+    guardamos=True,
+    carpeta_guardado=CARPETA_SALIDA + rf"\fotos multimetrica\gl con QVGA y sale en QVGA 5",
+    graficamos=True,
+)
+
+
 # %%
 
 # Barrido de medición: una foto en COLOR, enfocada, en cada punto de una grilla.
@@ -157,25 +188,28 @@ resultado = barrer_fotos_borde(
     grua,
     z_arriba_seguro=28,          # los mismos que en posicionar_en_muestra()
     z_min_seguridad=27.5,
-    carpeta_salida=r"C:\BackUp\Facultad\Labo 7\Fotos\barrido cerca de un borde 4",
+    carpeta_salida=CARPETA_SALIDA + r"\barrido para ver violetas",
     nombre_barrido=None,         # None -> "barrido <fecha> (x, y)"
     # x_inicial=153.6,
     # y_inicial=146.6,
-    n_x=5,
-    n_y=8,
-    paso_x_mm=0.1,
-    paso_y_mm=-0.15,
+    n_x=10,
+    n_y=10,
+    paso_x_mm=-0.0625,
+    paso_y_mm=0.075,
     # Cámara en la foto en color (None = automático). Para comparar
     # fraccion_rojos / saturacion_media entre fotos conviene fijarlos.
-    exposure_us=21450,
-    gain_db=23.8,
-    whitebal=[66.22236, 61.43028, 60.206],               # (r, g, b) en dB
+    exposure_us=37966,
+    gain_db=20.423784,
+    whitebal=[65.20144, 61.05388, 60.206],               # (r, g, b) en dB
+    # exposure_us=21450,
+    # gain_db=23.8,
+    # whitebal=[66.22236, 61.43028, 60.206],               # (r, g, b) en dB
     guardar_fotos_autofoco=False,
     # Si no es None, en los campos claros (vacíos) no se corre autofocus():
     # evita que el Z siga ruido. Calibrar con la columna intensidad_fondo del CSV.
     umbral_intensidad_fondo=None,
+    metrica=tenengrad
 )
-
 
 
 # %%
