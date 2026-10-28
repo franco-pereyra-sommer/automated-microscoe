@@ -6,16 +6,17 @@ import time
 from pathlib import Path
 from datetime import datetime
 
-import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
 # Módulos base del proyecto
 from camara_openmv import bytes_a_imagen
-# Reexportados por compatibilidad: las aplicaciones todavía los importan
-# desde acá (from busqueda_muestra import moverse_a_xy, ...). Viven en
-# impresora_cosmos.py; este módulo no los usa.
-from impresora_cosmos import DISTANCIA_XY_SIN_SUBIR_MM, moverse_a_xy  # noqa: F401
+from metricas_imagen import (
+    CRITERIOS_POR_DEFECTO,
+    FUNCIONES_METRICA,
+    evaluar_criterios,
+    intensidad_fondo,
+)
 
 
 # ============================================================
@@ -44,115 +45,6 @@ class PicoNoConfirmado(Exception):
     falsa, o simplemente que el máximo real está fuera del rango que
     se barrió."""
     pass
-
-
-# ============================================================
-# ESCALA DE GRISES (soporta GRAYSCALE y color, sin necesidad de
-# saber de antemano qué pixformat se usó)
-# ============================================================
-
-def _a_escala_de_grises(imagen):
-    """
-    Devuelve la imagen en escala de grises, sea cual sea el formato
-    con el que se haya capturado:
-      - 2 dimensiones (H, W): ya viene en escala de grises
-        (pixformat GRAYSCALE en una captura en vivo vía
-        bytes_a_imagen()), se devuelve tal cual.
-      - 3 dimensiones (H, W, 3): viene a color (RGB565, JPEG a color,
-        o cualquier imagen cargada desde disco con cargar_imagen(),
-        que cv2.imread() siempre fuerza a 3 canales), se convierte
-        con cv2.cvtColor().
-
-    Así las 4 métricas de abajo funcionan con cualquier pixformat sin
-    necesidad de que quien las llama le pase el formato a mano — el
-    array ya "sabe" si es color o no por su propia forma.
-    """
-
-    if imagen.ndim == 2:
-        return imagen
-
-    return cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
-
-
-# ============================================================
-# MÉTRICAS
-# ============================================================
-
-def intensidad_fondo(imagen):
-
-    gray = _a_escala_de_grises(imagen)
-
-    return 255 - gray.mean()
-
-
-def laplacian_variance(imagen):
-
-    gray = _a_escala_de_grises(imagen)
-
-    laplacian = cv2.Laplacian(
-        gray,
-        cv2.CV_64F
-    )
-
-    return laplacian.var()
-
-
-def tenengrad(imagen):
-
-    gray = _a_escala_de_grises(imagen)
-
-    sobel_x = cv2.Sobel(
-        gray,
-        cv2.CV_64F,
-        1,
-        0,
-        ksize=3
-    )
-
-    sobel_y = cv2.Sobel(
-        gray,
-        cv2.CV_64F,
-        0,
-        1,
-        ksize=3
-    )
-
-    magnitud = sobel_x**2 + sobel_y**2
-
-    return magnitud.mean()
-
-
-def varianza_intensidad(imagen):
-
-    gray = _a_escala_de_grises(imagen)
-
-    return gray.var()
-
-
-# bytes_a_imagen() se movió a camara_openmv.py (se importa arriba).
-
-
-# ============================================================
-# MÉTRICAS DISPONIBLES PARA EL BARRIDO GRUESO / CONFIRMACIÓN
-# ============================================================
-
-FUNCIONES_METRICA = {
-    "laplacian": laplacian_variance,
-    "tenengrad": tenengrad,
-    "varianza": varianza_intensidad,
-}
-
-CRITERIOS_POR_DEFECTO = {
-    "laplacian": 12,
-    "tenengrad": 200,
-    "varianza": 30,
-} # Por alguna razon dejo de valer
-
-# CRITERIOS_POR_DEFECTO = {
-#     "laplacian": 6.35,
-#     "tenengrad": 70,
-#     "varianza": 10.35,
-# }
 
 
 # ============================================================
@@ -509,31 +401,6 @@ def autofocus(
 
 
 # ============================================================
-# EVALUAR CRITERIOS OR DE UNA IMAGEN
-# ============================================================
-
-def _evaluar_criterios(imagen, criterios):
-    """
-    Devuelve (valores, disparados):
-      valores: {nombre_metrica: valor_calculado}
-      disparados: lista de nombres de métrica que superaron su umbral
-    """
-
-    valores = {
-        nombre: FUNCIONES_METRICA[nombre](imagen)
-        for nombre in criterios
-    }
-
-    disparados = [
-        nombre
-        for nombre, umbral in criterios.items()
-        if valores[nombre] >= umbral
-    ]
-
-    return valores, disparados
-
-
-# ============================================================
 # FASE 0: VERIFICACIÓN TEMPRANA DE PRESENCIA DE MUESTRA
 # ============================================================
 
@@ -759,7 +626,7 @@ def buscar_muestra_en_z(
         image_data = camara.capturar()
         imagen = bytes_a_imagen(image_data)
 
-        valores, disparados = _evaluar_criterios(imagen, criterios_deteccion)
+        valores, disparados = evaluar_criterios(imagen, criterios_deteccion)
 
         historial.append({"z": impresora.posicion_z, **valores})
 
@@ -1417,10 +1284,6 @@ def foco_final_multimetrica(
     resultados_por_metrica["archivo_plot"] = archivo_plot
 
     return resultados_por_metrica
-
-
-# moverse_a_xy() y DISTANCIA_XY_SIN_SUBIR_MM se movieron a impresora_cosmos.py
-# (se reexportan arriba por compatibilidad con las aplicaciones).
 
 
 # ============================================================

@@ -156,7 +156,7 @@ class TrimakerCOSMOS:
     def pasos_a_mm(self, pasos_para_1_mm, cuantos_pasos_queres_hacer):
         # OJO: esta función le faltaba 'self' — tal como estaba definida,
         # llamarla como self.pasos_a_mm(...) (que es como se usa en
-        # desp_lin_abs/desp_lin_rel con pasos_de_motor=True) tiraba
+        # desp_lin_000/desp_lin_cam con pasos_de_motor=True) tiraba
         # TypeError, porque Python pasa 'self' como primer argumento
         # posicional de más. No se nota en el uso normal porque
         # pasos_de_motor siempre quedó en False hasta ahora.
@@ -191,7 +191,7 @@ class TrimakerCOSMOS:
 
     def esperar_fin_movimiento(self, timeout=15):
         """
-        Manda M400 + M114 (desde desp_lin_abs/desp_lin_rel/home, no acá
+        Manda M400 + M114 (desde desp_lin_000/desp_lin_cam/home, no acá
         adentro — ver el comentario en esos métodos) y bloquea hasta ver
         la línea de posición que M114 devuelve al terminar el movimiento.
         Devuelve el tiempo (en segundos) que tardó en aparecer esa línea,
@@ -209,7 +209,7 @@ class TrimakerCOSMOS:
         return None
 
     # =========================
-    # VALIDAR RANGO (usado por desp_lin_abs y desp_lin_rel)
+    # VALIDAR RANGO (usado por desp_lin_000 y desp_lin_cam)
     # =========================
     def _dentro_de_rango(self, x_absoluto, y_absoluto, z_absoluto):
         """
@@ -252,6 +252,8 @@ class TrimakerCOSMOS:
     # =========================
     def desp_lin_000(self, x=None, y=None, z=None, feedrate=3000, pasos_de_motor=False, devolveme_la_respuesta=False, devolveme_tiempos=False):
         '''
+        Mueve la cámara a (x, y, z) ABSOLUTOS en mm (referencia fija a la impresora).
+        Si el destino sale del rango se cancela con un aviso, sin mover nada.
         Antiguo: "desp_lin_abs"
         '''
         # NOTA: x, y, z tienen que venir los tres, con un valor numérico
@@ -303,9 +305,11 @@ class TrimakerCOSMOS:
     # =========================
     def desp_lin_cam(self, x=None, y=None, z=None, feedrate=3000, pasos_de_motor=False, devolveme_la_respuesta=False, devolveme_tiempos=False):
         '''
+        Mueve la cámara (x, y, z) RELATIVOS en mm respecto de donde está (referencia sobre la cámara).
+        Si el destino sale del rango se cancela con un aviso, sin mover nada.
         Antiguo: "desp_lin_rel"
         '''
-        # Mismo comentario que en desp_lin_abs: x, y, z tienen que
+        # Mismo comentario que en desp_lin_000: x, y, z tienen que
         # venir los tres con valor numérico.
 
         if pasos_de_motor:
