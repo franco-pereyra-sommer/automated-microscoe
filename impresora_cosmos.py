@@ -248,9 +248,12 @@ class TrimakerCOSMOS:
         return dentro_de_rango
 
     # =========================
-    # MOVER LINEALMENTE ABSOLUTO (SR fijo a la impresora)
+    # MOVER LINEALMENTE ABSOLUTO (SR fijo a la impresora). Antiguo: "desp_lin_abs"
     # =========================
-    def desp_lin_abs(self, x=None, y=None, z=None, feedrate=3000, pasos_de_motor=False, devolveme_la_respuesta=False, devolveme_tiempos=False):
+    def desp_lin_000(self, x=None, y=None, z=None, feedrate=3000, pasos_de_motor=False, devolveme_la_respuesta=False, devolveme_tiempos=False):
+        '''
+        Antiguo: "desp_lin_abs"
+        '''
         # NOTA: x, y, z tienen que venir los tres, con un valor numérico
         # (no None) — a pesar del default, pasar alguno en None hace que
         # la comparación "x > self.max_posicion_x" de más abajo explote.
@@ -296,9 +299,12 @@ class TrimakerCOSMOS:
             return tiempo_xy, tiempo_z
 
     # =========================
-    # MOVER LINEALMENTE RELATIVO (SR sobre la camara)
+    # MOVER LINEALMENTE RELATIVO (SR sobre la camara). Antiguo: "desp_lin_rel"
     # =========================
-    def desp_lin_rel(self, x=None, y=None, z=None, feedrate=3000, pasos_de_motor=False, devolveme_la_respuesta=False, devolveme_tiempos=False):
+    def desp_lin_cam(self, x=None, y=None, z=None, feedrate=3000, pasos_de_motor=False, devolveme_la_respuesta=False, devolveme_tiempos=False):
+        '''
+        Antiguo: "desp_lin_rel"
+        '''
         # Mismo comentario que en desp_lin_abs: x, y, z tienen que
         # venir los tres con valor numérico.
 
@@ -382,6 +388,88 @@ class TrimakerCOSMOS:
         self.ser.close()
 
         print("Puerto cerrado")
+
+
+# ============================================================
+# MOVIMIENTO EN XY SEGURO: regla de las distancias cortas
+# (Agregado a este módulo el 2026-10-27; antes vivía en busqueda_muestra.py.)
+# ============================================================
+#
+# Regla de seguridad (validada en el laboratorio): parado en el
+# z_enfoque de un campo visual, un desplazamiento XY corto (hasta
+# DISTANCIA_XY_SIN_SUBIR_MM, hoy 0.4 mm)
+# no choca con la muestra, aunque esté inclinada (se supone que no
+# demasiado). Para distancias mayores ya no se puede asegurar eso: una
+# pendiente que sube puede quedar en el camino del objetivo (distancia
+# de trabajo de 300 µm). Entonces, para viajes largos HAY QUE subir
+# antes a una altura de seguridad más alta, moverse en XY, y recién
+# después enfocar de nuevo (posicionar_en_muestra(), o el plano de
+# enfoque aproximado + autofocus() para confirmar y ajustar la altura).
+#
+# Todo código nuevo que se mueva en XY entre campos visuales tiene que
+# pasar por moverse_a_xy() en vez de llamar a desp_lin_000() a mano.
+#
+# Historia del umbral: la regla se validó en el laboratorio con desplazamientos
+# de ~150 µm (0.15 mm). El 2026-10-15 se subió a 0.4 mm a pedido de Franco.
+
+DISTANCIA_XY_SIN_SUBIR_MM = 0.4
+
+
+def moverse_a_xy(
+    impresora,
+    x,
+    y,
+    z_seguro,
+    distancia_sin_subir=DISTANCIA_XY_SIN_SUBIR_MM,
+    feedrate_xy=3000,
+    espera_movimiento=0.3,
+    devolveme_la_respuesta=False,
+):
+    """
+    Lleva la platina a (x, y) aplicando la regla de arriba.
+
+    - Distancia XY <= 'distancia_sin_subir' (default 0.4 mm): se
+      mueve en XY manteniendo el Z actual (que es el z_enfoque del
+      campo visual donde está parado).
+    - Distancia mayor: si el Z actual es menor que 'z_seguro', primero
+      sube hasta 'z_seguro' (si ya está más arriba, no baja); después
+      se mueve en XY a esa altura, y se queda ahí.
+
+    Devuelve True si fue un viaje largo (en ese caso la platina queda
+    en una altura de viaje, SIN enfocar: quien llama tiene que
+    reenfocar), o False si fue un desplazamiento corto (Z se mantiene,
+    y alcanza con un autofocus() local).
+    """
+
+    x_actual = impresora.posicion_x
+    y_actual = impresora.posicion_y
+    _, _, z_actual = impresora.pregunta_posicion_actual()
+
+    if x_actual is None or y_actual is None or z_actual is None:
+        raise RuntimeError("Llamá primero a impresora.home()")
+
+    distancia = float(np.hypot(x - x_actual, y - y_actual))
+
+    viaje_largo = distancia > distancia_sin_subir + 1e-9
+
+    if viaje_largo and z_actual < z_seguro:
+
+        impresora.desp_lin_cam(
+            0, 0, z_seguro - z_actual,
+            devolveme_la_respuesta=devolveme_la_respuesta,
+        )
+        time.sleep(espera_movimiento)
+
+    _, _, z_viaje = impresora.pregunta_posicion_actual()
+
+    impresora.desp_lin_000(
+        x=x, y=y, z=z_viaje,
+        feedrate=feedrate_xy,
+        devolveme_la_respuesta=devolveme_la_respuesta,
+    )
+    time.sleep(espera_movimiento)
+
+    return viaje_largo
 
 
 # %%

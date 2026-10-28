@@ -23,6 +23,7 @@ from datetime import datetime
 from pathlib import Path
 import re
 
+import cv2
 import numpy as np
 import serial
 from PIL import Image
@@ -94,6 +95,39 @@ def _resolver_opcion(valor, enum_clase, nombre_parametro):
         f"{nombre_parametro} tiene que ser un string o un miembro de "
         f"{enum_clase.__name__}, no {type(valor).__name__}"
     )
+
+
+# ======================================================
+# DECODIFICACIÓN DE LA CAPTURA
+# ======================================================
+
+def bytes_a_imagen(image_data):
+    """
+    Decodifica los bytes que devuelve OpenMVCamera.capturar() a un array
+    de numpy listo para OpenCV:
+      - GRAYSCALE: array 2D (H, W).
+      - Color (RGB565 / JPEG a color): array 3D (H, W, 3) en orden BGR,
+        la convención de OpenCV (por eso las métricas y cv2.imwrite()
+        lo usan directo). Para mostrarla con matplotlib hay que pasarla
+        a RGB (ver OpenMVCamera.mostrar()).
+
+    Agregada a este módulo el 2026-10-27; antes vivía en
+    busqueda_muestra.py.
+    """
+
+    imagen = Image.open(
+        io.BytesIO(image_data)
+    )
+
+    imagen = np.array(imagen)
+
+    if len(imagen.shape) == 3:
+        imagen = cv2.cvtColor(
+            imagen,
+            cv2.COLOR_RGB2BGR
+        )
+
+    return imagen
 
 
 class OpenMVCamera:
@@ -400,18 +434,16 @@ class OpenMVCamera:
 
     def mostrar(self, image_data):
 
-        img = Image.open(
-            io.BytesIO(image_data)
-        )
-
-        imagen = np.array(img)
+        imagen = bytes_a_imagen(image_data)
 
         fig, ax = plt.subplots()
 
         if imagen.ndim == 2:
             ax.imshow(imagen, cmap="gray")
         else:
-            ax.imshow(imagen)
+            # bytes_a_imagen() entrega BGR (convención de OpenCV);
+            # imshow espera RGB.
+            ax.imshow(cv2.cvtColor(imagen, cv2.COLOR_BGR2RGB))
 
         ax.axis("off")
 
