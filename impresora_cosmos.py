@@ -367,7 +367,11 @@ class TrimakerCOSMOS:
         self.ser.write(b"G28\n")
         self.ser.write(b"M400\n")
 
-        tiempo_home = self.esperar_fin_movimiento()
+        tiempo_home_primero = self.esperar_fin_movimiento()
+
+        self.ser.write(b"M400\n")
+        
+        tiempo_home_segundo = self.esperar_fin_movimiento()
 
         time.sleep(0.3)
 
@@ -380,9 +384,10 @@ class TrimakerCOSMOS:
         self.actualizar_posicion_actual(x=0, y=0, z=40, tipo_de_cord="abs", devolveme_la_respuesta=devolveme_la_respuesta)
 
         if devolveme_timepos:
-            print(f"{tiempo_home = }")
+            print(f"{tiempo_home_primero = }")
+            print(f"{tiempo_home_segundo = }")
             print(f"{tiempo_bajar = }")
-            return tiempo_home, tiempo_bajar
+            return tiempo_home_primero, tiempo_home_segundo, tiempo_bajar
 
     # =========================
     # CERRAR PUERTO
