@@ -1,0 +1,393 @@
+BITACORA.txt -- Hoja de ruta y bitácora de env_labo7
+Creada: 2026-10-27
+
+CÓMO USAR ESTE ARCHIVO
+  - Para un chat nuevo normalmente alcanza PROYECTO_CONTEXTO.txt + REGLAS_CODIGO.txt. Esta bitácora se
+    pega entera solo si hace falta; si no, pegar la entrada de la aplicación que se retoma.
+  - Cada aplicación se completa DESDE EL CHAT donde se trabajó: abrir ese chat y pedir "actualizá la
+    entrada de <carpeta> en BITACORA.txt" (plantilla en la sección F: objetivo, qué se propone,
+    a qué se llegó, fechas aproximadas, lo que digan los comentarios del código).
+  - Estados: EN PRUEBA | FUNCIONA | NO PROBADA | ABANDONADA. "COMPLETAR" = falta la entrada.
+    Si la aplicación usa módulos descontinuados o nombres que ya no existen, se ve en la sección C.
+  - Las secciones C (tabla de aplicaciones) y el índice de API de PROYECTO_CONTEXTO.txt son
+    AUTOGENERADAS: python herramientas/generar_indice.py. No editarlas a mano.
+
+  A. Registro de cambios de los módulos base (lo más nuevo arriba)
+  B. Nombres viejos -> nombres nuevos
+  C. Qué importa cada aplicación y si todavía existe (autogenerada)
+  D. Aplicaciones (por carpeta, en orden cronológico)
+  E. Pendientes e ideas
+  F. Plantilla de entrada
+
+
+======================================================================================================
+A. REGISTRO DE CAMBIOS DE LOS MÓDULOS BASE
+======================================================================================================
+
+2026-10-27  (Franco, cambio propio en impresora_cosmos.py; en prueba en el equipo)
+  - home(): ahora manda G28 + M400 y espera una línea de posición; manda M400 otra vez y espera una
+    segunda; después baja a Z=40 como antes. Con devolveme_timepos=True devuelve TRES tiempos
+    (primero, segundo, bajar) en vez de dos.
+  - Motivo: G28 emite solo, al terminar, una línea de posición igual a la de M114 (Franco sospecha que
+    dos), y se veía la celda terminada con la impresora todavía moviéndose. Ver pendiente 9.
+
+2026-10-27  (Claude, a pedido de Franco; posterior a c8b6b60)
+  - tests/simuladores.py: SerialFalso(lineas_por_g28=2) contesta a G28 con ese número de líneas de
+    posición (valor sin confirmar en el equipo). tests/test_impresora.py: pruebas nuevas que fallan si
+    queda una línea de posición sin leer en el buffer después de home() o de un movimiento (con el
+    home() anterior fallan, que es el síntoma de pendiente 9).
+  - NUEVO módulo base metricas_imagen.py: la categoría "procesamiento de imagen sin hardware" del
+    árbol de decisión. Se movieron desde busqueda_muestra.py: _a_escala_de_grises, intensidad_fondo,
+    laplacian_variance, tenengrad, varianza_intensidad, FUNCIONES_METRICA, CRITERIOS_POR_DEFECTO y
+    _evaluar_criterios (ahora evaluar_criterios, pública porque la importa otro módulo).
+  - busqueda_muestra.py: sin reexports de lo que se movió (las aplicaciones viejas fallan al
+    importarlo, a propósito). Importa lo que usa de camara_openmv y metricas_imagen. Se sacó el import
+    de cv2, que quedó sin uso.
+  - impresora_cosmos.py: docstrings descriptivos en desp_lin_000 y desp_lin_cam; comentarios que
+    nombraban desp_lin_abs / desp_lin_rel actualizados.
+  - NUEVAS carpetas: tests/ (simuladores + pruebas: python tests/correr_todo.py) y herramientas/
+    (generar_indice.py).
+  - NUEVOS archivos: PROYECTO_CONTEXTO.txt, REGLAS_CODIGO.txt, BITACORA.txt.
+
+2026-10-27  (commit c8b6b60 "Centralizacion")
+  - Franco renombró en impresora_cosmos.py: desp_lin_abs -> desp_lin_000 y desp_lin_rel ->
+    desp_lin_cam.
+  - bytes_a_imagen() pasó de busqueda_muestra.py a camara_openmv.py (función de módulo).
+    OpenMVCamera.mostrar() la usa: mantiene la rama 2D (gris) y para color convierte BGR -> RGB
+    antes de matplotlib (sin esa conversión los canales rojo y azul salían cruzados).
+  - moverse_a_xy() y DISTANCIA_XY_SIN_SUBIR_MM pasaron de busqueda_muestra.py a impresora_cosmos.py
+    (función de módulo, misma firma).
+  - busqueda_muestra.py: todas las llamadas desp_lin_rel / desp_lin_abs pasaron a desp_lin_cam /
+    desp_lin_000.
+  - metricas_enfoque.py (obsoleto) se movió a "Oudated code".
+
+2026-10-15  (según el comentario del código)
+  - DISTANCIA_XY_SIN_SUBIR_MM: de 0.15 mm a 0.4 mm, a pedido de Franco (la regla se había validado
+    con saltos de ~150 µm). Entonces vivía en busqueda_muestra.py.
+
+Sin fecha registrada (sep.-oct. 2026, según notas)
+  - El módulo único Main.py se dividió en camara_openmv.py (OpenMVCamera) e impresora_cosmos.py
+    (TrimakerCOSMOS). El original quedó en "Oudated code" como Main_discontinued.py.
+
+
+======================================================================================================
+B. NOMBRES VIEJOS -> NOMBRES NUEVOS
+======================================================================================================
+  Viejo                                              Nuevo
+  -------------------------------------------------  ---------------------------------------------
+  TrimakerCOSMOS.desp_lin_abs()                      TrimakerCOSMOS.desp_lin_000()
+  TrimakerCOSMOS.desp_lin_rel()                      TrimakerCOSMOS.desp_lin_cam()
+  busqueda_muestra.bytes_a_imagen                    camara_openmv.bytes_a_imagen
+  busqueda_muestra.moverse_a_xy                      impresora_cosmos.moverse_a_xy
+  busqueda_muestra.DISTANCIA_XY_SIN_SUBIR_MM         impresora_cosmos.DISTANCIA_XY_SIN_SUBIR_MM
+  busqueda_muestra._a_escala_de_grises               metricas_imagen._a_escala_de_grises
+  busqueda_muestra.intensidad_fondo                  metricas_imagen.intensidad_fondo
+  busqueda_muestra.laplacian_variance                metricas_imagen.laplacian_variance
+  busqueda_muestra.tenengrad                         metricas_imagen.tenengrad
+  busqueda_muestra.varianza_intensidad               metricas_imagen.varianza_intensidad
+  busqueda_muestra.FUNCIONES_METRICA                 metricas_imagen.FUNCIONES_METRICA
+  busqueda_muestra.CRITERIOS_POR_DEFECTO             metricas_imagen.CRITERIOS_POR_DEFECTO
+  busqueda_muestra._evaluar_criterios                metricas_imagen.evaluar_criterios
+  Main.OpenMVCamera  (Main.py descontinuado)         camara_openmv.OpenMVCamera
+  Main.TrimakerCOSMOS (Main.py descontinuado)        impresora_cosmos.TrimakerCOSMOS
+  metricas_enfoque.autofocus                         busqueda_muestra.autofocus
+  metricas_enfoque.bytes_a_imagen                    camara_openmv.bytes_a_imagen
+  metricas_enfoque.intensidad_fondo, laplacian_variance, tenengrad, varianza_intensidad
+                                                     metricas_imagen.<mismo nombre>
+  metricas_enfoque.barrido_z_mas_guardar_imagenes, cargar_imagen, extraer_coordenadas,
+  fraccion_pixeles_rojos                             sin equivalente en la base actual (siguen solo
+                                                     en "Oudated code/metricas_enfoque.py")
+
+  Nota: metricas_enfoque.py y Main.py no están en la raíz; sus nombres de arriba son los que
+  importaban las aplicaciones viejas. La correspondencia con la base actual se armó mirando qué
+  existe hoy con ese nombre; revisar la firma antes de reemplazar una llamada.
+
+
+======================================================================================================
+C. QUÉ IMPORTA CADA APLICACIÓN Y SI TODAVÍA EXISTE
+======================================================================================================
+#<<< TABLA_APPS (autogenerada: python herramientas/generar_indice.py -- no editar a mano) >>>
+Generado: 2026-10-28 02:43 (herramientas/generar_indice.py)
+Leyenda:  nombre~        = funciona solo porque ese módulo lo importa de otro (la definición está en otro lado);
+          FALTA          = el nombre ya no existe en el módulo base vigente: la app falla al importarlo;
+          DESCONTINUADO  = el módulo ya no está en la raíz (Main.py, metricas_enfoque.py: ver 'Oudated code').
+Las apps se actualizan solo si Franco lo pide (ver REGLAS_CODIGO.txt).
+
+26.08.16 En busca del enfoque automatico_local
+  Main: OpenMVCamera, TrimakerCOSMOS  [DESCONTINUADO: Main.py ya no está en la raíz]
+
+26.08.17 Determinar el tiempo transcurrido en el movimiento de una orden
+  metricas_enfoque: *  [DESCONTINUADO: metricas_enfoque.py ya no está en la raíz]
+  Main: OpenMVCamera, TrimakerCOSMOS  [DESCONTINUADO: Main.py ya no está en la raíz]
+
+26.08.18 Viendo las metricas de las mediciones de hoy
+  metricas_enfoque: *  [DESCONTINUADO: metricas_enfoque.py ya no está en la raíz]
+
+26.08.20 barrido mas video
+  metricas_enfoque: *  [DESCONTINUADO: metricas_enfoque.py ya no está en la raíz]
+  Main: OpenMVCamera, TrimakerCOSMOS  [DESCONTINUADO: Main.py ya no está en la raíz]
+
+26.08.21 Configuracion del tomado de fotos
+  camara_openmv: OpenMVCamera
+  impresora_cosmos: TrimakerCOSMOS
+  busqueda_muestra: *
+  metricas_enfoque: *  [DESCONTINUADO: metricas_enfoque.py ya no está en la raíz]
+  Main: OpenMVCamera, TrimakerCOSMOS  [DESCONTINUADO: Main.py ya no está en la raíz]
+
+26.08.27 servidor
+  (no importa módulos base)
+
+26.09.01 barrido para mosaico
+  metricas_enfoque: *  [DESCONTINUADO: metricas_enfoque.py ya no está en la raíz]
+  Main: OpenMVCamera, TrimakerCOSMOS  [DESCONTINUADO: Main.py ya no está en la raíz]
+
+26.09.06 tres tipos de campos visuales
+  metricas_enfoque: *, autofocus, barrido_z_mas_guardar_imagenes, bytes_a_imagen, cargar_imagen, intensidad_fondo, laplacian_variance, tenengrad, varianza_intensidad  [DESCONTINUADO: metricas_enfoque.py ya no está en la raíz]
+  Main: OpenMVCamera, TrimakerCOSMOS  [DESCONTINUADO: Main.py ya no está en la raíz]
+
+26.09.11 barrido en z grueso
+  camara_openmv: *
+  impresora_cosmos: TrimakerCOSMOS
+  busqueda_muestra: *
+  metricas_enfoque: autofocus, barrido_z_mas_guardar_imagenes, bytes_a_imagen, cargar_imagen, extraer_coordenadas, fraccion_pixeles_rojos, intensidad_fondo, laplacian_variance, tenengrad, varianza_intensidad  [DESCONTINUADO: metricas_enfoque.py ya no está en la raíz]
+  Main: OpenMVCamera, TrimakerCOSMOS  [DESCONTINUADO: Main.py ya no está en la raíz]
+
+26.09.29 objetivo mosaico
+  camara_openmv: OpenMVCamera
+  impresora_cosmos: TrimakerCOSMOS
+  busqueda_muestra: *
+  metricas_enfoque: cargar_imagen, extraer_coordenadas  [DESCONTINUADO: metricas_enfoque.py ya no está en la raíz]
+  Main: OpenMVCamera, TrimakerCOSMOS  [DESCONTINUADO: Main.py ya no está en la raíz]
+
+26.10.02 Sacandole fotos al borde
+  camara_openmv: OpenMVCamera
+  impresora_cosmos: TrimakerCOSMOS
+  busqueda_muestra: *, FUNCIONES_METRICA~, PicoNoConfirmado, autofocus, bytes_a_imagen~, intensidad_fondo~, laplacian_variance, moverse_a_xy
+    FALTA en busqueda_muestra: laplacian_variance, moverse_a_xy
+
+26.10.08 deteccion del borde + plano muestra aprox
+  camara_openmv: OpenMVCamera
+  impresora_cosmos: TrimakerCOSMOS
+  busqueda_muestra: CampoVisualSinMuestra, DISTANCIA_XY_SIN_SUBIR_MM, FUNCIONES_METRICA~, PicoNoConfirmado, _a_escala_de_grises, autofocus, bytes_a_imagen~, intensidad_fondo~, laplacian_variance, moverse_a_xy, posicionar_en_muestra
+    FALTA en busqueda_muestra: DISTANCIA_XY_SIN_SUBIR_MM, _a_escala_de_grises, laplacian_variance, moverse_a_xy
+
+26.10.13 HDR
+  camara_openmv: Framesize, OpenMVCamera, PixFormat
+  impresora_cosmos: TrimakerCOSMOS
+  busqueda_muestra: CampoVisualSinMuestra, DISTANCIA_XY_SIN_SUBIR_MM, FUNCIONES_METRICA~, PicoNoConfirmado, autofocus, bytes_a_imagen~, intensidad_fondo~, laplacian_variance, moverse_a_xy, posicionar_en_muestra
+    FALTA en busqueda_muestra: DISTANCIA_XY_SIN_SUBIR_MM, laplacian_variance, moverse_a_xy
+
+26.10.16 detector de puntos violetas y sus fotos
+  camara_openmv: OpenMVCamera
+  impresora_cosmos: TrimakerCOSMOS
+  busqueda_muestra: DISTANCIA_XY_SIN_SUBIR_MM, PicoNoConfirmado, autofocus, bytes_a_imagen~, foco_final_multimetrica, laplacian_variance, moverse_a_xy, posicionar_en_muestra, tenengrad, varianza_intensidad
+    FALTA en busqueda_muestra: DISTANCIA_XY_SIN_SUBIR_MM, laplacian_variance, moverse_a_xy, tenengrad, varianza_intensidad
+
+Resumen: de 14 carpetas, 9 importan módulos descontinuados y 4 importan nombres que ya no existen en los módulos base vigentes.
+#<<< FIN_TABLA_APPS >>>
+
+
+======================================================================================================
+D. APLICACIONES (en orden cronológico; la fecha de la carpeta es la de inicio)
+======================================================================================================
+  Todas las entradas están sin completar desde el chat de origen salvo lo que dicen las notas del
+  proyecto (marcado "notas"). "COMPLETAR" = pedir en el chat donde se trabajó que llene la plantilla
+  de la sección F. Las listas de archivos son las de la carpeta al 2026-10-27.
+
+[26.08.16] En busca del enfoque automático_local
+  Archivos: aplic_autoenfoque_en_z.py, metricas_enfoque.py
+  Base que usa: Main (descontinuado).
+  Objetivo / enfoque / resultado / estado: COMPLETAR.
+
+[26.08.17] Determinar el tiempo transcurrido en el movimiento de una orden
+  Archivos: aplic_tiempo_de_respuesta_08_27.py, aplic_tiempos_en_el_desplazamiento.py,
+            SOLUCION_prob_temporal.py, prueba_cluade_tiempo_muerto_26.09.11.py (+ notebook)
+  Base que usa: Main y metricas_enfoque (descontinuados).
+  Tema (notas): sincronizar Python con la impresora, esperando a que los motores se detengan antes
+    de disparar la cámara. Hallazgos de la época: M114 devuelve la posición destino apenas se encola
+    la orden, no la real; M400 se observó devolviendo "ok" casi al instante aunque el movimiento
+    tardaba 3-4 s (causa sin resolver en esas notas); había un sleep fijo de 0.5 s en enviar_gcode()
+    que dejaba "ok" sin leer en el buffer. Plan de entonces: trazar la comunicación serie con
+    escuchar() en un hilo; último recurso: calibrar tiempos por distancia.
+  Hoy: impresora_cosmos.esperar_fin_movimiento() manda M400 + M114 y espera la línea de posición.
+  Resultado / estado: COMPLETAR (el nombre SOLUCION_prob_temporal.py sugiere que se resolvió).
+
+[26.08.18] Viendo las métricas de las mediciones de hoy
+  Archivos: vista_metricas.py, 09.26 vista_metricas.py
+  Base que usa: metricas_enfoque (descontinuado).
+  Objetivo / enfoque / resultado / estado: COMPLETAR.
+
+[26.08.20] Barrido más video
+  Archivos: aplic_barrido_mas_vid.py
+  Base que usa: Main y metricas_enfoque (descontinuados).
+  Objetivo / enfoque / resultado / estado: COMPLETAR.
+
+[26.08.21] Configuración del tomado de fotos
+  Archivos: aplic_config_param_cam.py, aplic_config_param_cam_09_29.py, aplic_config_param_cam_10_16.py
+  Base que usa: camara_openmv, impresora_cosmos, busqueda_muestra (import *) + Main y
+    metricas_enfoque (descontinuados).
+  Objetivo / enfoque / resultado / estado: COMPLETAR. Relacionado: OpenMVCamera.config_de_una().
+
+[26.08.27] Servidor
+  Archivos: codigo_mateo.py
+  Plan (notas): servidor web para mostrar las fotos y videos del barrido y que el operador elija la
+    foto mejor enfocada (eso también informa qué métrica de enfoque conviene confiar); la idea es
+    alojarlo en una Raspberry Pi (detalles a preguntar).
+  Estado: COMPLETAR (no importa módulos base). Ver también Main_server.py en la raíz (sin clasificar).
+
+[26.09.01] Barrido para mosaico
+  Archivos: aplic_barrido_mosaico.py
+  Base que usa: Main y metricas_enfoque (descontinuados).
+  Objetivo / enfoque / resultado / estado: COMPLETAR. Continúa en 26.09.29.
+
+[26.09.06] Tres tipos de campos visuales
+  Archivos: escribiendo_la_identificacion_de_campos.py, claude_busqueda_muestra*.py (4 versiones),
+            claude_calibrar_umbral_rojo.py, un CSV de contraste
+  Base que usa: Main y metricas_enfoque (descontinuados).
+  Objetivo (notas): distinguir tres tipos de campo visual para decidir si hay muestra y a qué
+    altura. Tipo 1 = sin muestra / demasiado lejos; Tipo 2 = glóbulos rojos desenfocados; Tipo 3 =
+    cerca del foco. Para la detección gruesa, Tipo 2 y Tipo 3 se tratan como equivalentes.
+  Resultado (notas, sep.): la varianza de intensidad separaba limpiamente "con muestra" de "sin
+    muestra" (criterio de entonces: varianza >= 15.0); la fracción de píxeles rojos se descartó
+    porque las distribuciones se superponían. Se calibró sobre un conjunto de imágenes clasificadas
+    por tipo. Todo el procesamiento pasó a GRAYSCALE (se descartó decodificar RGB565 crudo).
+  Hoy: CRITERIOS_POR_DEFECTO usa varianza 30 y el código dice que los valores "dejaron de valer"
+    (ver pendientes). Estado: COMPLETAR.
+
+[26.09.11] Barrido en Z grueso
+  Archivos: aplic_busqueda_muestra_NO_PROBADO.py, aplic_analisis_del_barrido_grueso_claude.py,
+            aplic_guard_de_imag_cerca_del_foco_parasitos_10_13.py, aplic_guardado_de_imagenes.py
+  Base que usa: camara_openmv (import *), impresora_cosmos, busqueda_muestra (import *) + Main y
+    metricas_enfoque (descontinuados).
+  Objetivo (notas): encontrar la altura de la muestra con un barrido grueso en Z y confirmarla
+    contra señales falsas, seguido de un autofoco fino. Hoy esa lógica vive en busqueda_muestra.py
+    (buscar_muestra_en_z, autofocus).
+  Notas de la época: se corrigió un bug por el cual la captura de imágenes del barrido quedaba detrás
+    de una condición que no se cumplía en el caso normal; el barrido arranca desde
+    impresora.posicion_z.
+  Estado: COMPLETAR.
+
+[26.09.29] Objetivo mosaico
+  Archivos: barrido_espiral_10_02.py, claude_barrido_espiral*.py, claude_generar_mosaico_fiji*.py,
+            claude_reconstruir_mosaico*.py (varias versiones "outdated")
+  Base que usa: camara_openmv, impresora_cosmos, busqueda_muestra (import *) + Main y
+    metricas_enfoque (descontinuados).
+  Objetivo (notas): armar una imagen tipo mosaico de la muestra con fotos en la mayor calidad
+    (4K / WQXGA2) ubicadas por su x-y real conocido.
+  Enfoque (notas): barrido en espiral alrededor del punto inicial, con campos superpuestos y paso
+    igual a la mitad del campo visual en cada eje, con tope configurable de "pasos radiales".
+    Autofoco en CADA posición (el foco se pierde muy rápido al moverse; posicionar_en_muestra con
+    hacer_foco_final=False + autofocus() por posición); se guardan las fotos del autofoco (subcarpeta
+    por posición, con la posición en el nombre) y la foto de alta calidad. La reconstrucción va en un
+    código aparte. Se automatizó el armado con Fiji (Grid/Collection Stitching, macro).
+  Resultado (notas, oct.): primer error de Fiji por las barras "\" de la ruta de Windows dentro del
+    macro (se pasaron a "/"); el plugin escribe un archivo por canal y se agregó una función que los
+    une en un RGB. Mapeo de ejes confirmado (x = filas, y = columnas). Campo visual de entonces en 4K:
+    0.214 x 0.286 mm, impreciso.
+  Estado: COMPLETAR.
+
+[26.10.02] Sacándole fotos al borde
+  Archivos: barrido_fotos_borde.py, aplic_tomando_fotos_del_borde.py
+  Base que usa: camara_openmv, impresora_cosmos, busqueda_muestra (usa moverse_a_xy, que ya no está
+    ahí: ver sección C).
+  Objetivo / enfoque / resultado / estado: COMPLETAR.
+
+[26.10.08] Detección del borde + plano de la muestra aproximado
+  Archivos: barrido_plano_enfoque.py, plano_enfoque.py, analisis_campo_visual.py
+  Base que usa: camara_openmv, impresora_cosmos, busqueda_muestra (ver sección C).
+  Objetivo / enfoque / resultado / estado: COMPLETAR.
+
+[26.10.13] HDR
+  Archivos: HDR.py, foto_final.jpg
+  Base que usa: camara_openmv (OpenMVCamera, PixFormat, Framesize), impresora_cosmos,
+    busqueda_muestra (ver sección C).
+  Objetivo / enfoque / resultado / estado: COMPLETAR.
+
+[26.10.16] Detector de puntos violetas y sus fotos
+  Archivos: deteccion_puntos.py, deteccion_contraste.py, calibrar_detector.py, analizar_colores.py,
+            centrado.py, barrido_puntos.py, correr_barrido_puntos.py, adaptador_hardware.py,
+            diagnostico_barrido.py, simulador_microscopio.py, test_adaptador_hardware.py,
+            test_barrido_simulado.py, test_deteccion_contraste.py, imágenes de colores
+  Base que usa: camara_openmv, impresora_cosmos y busqueda_muestra (ver nombres que faltan en la
+    sección C). Define la clase MicroscopioCosmos (ver pendientes).
+  Objetivo (notas): detectar puntos violetas (glóbulos rojos teñidos, muy separados entre sí) en un
+    preparado fijo, como paso previo a detectar parásitos vivos.
+  Enfoque (notas): por campo visual, si hay un punto violeta se centra la imagen en él y se saca la
+    foto; si no, se cambia de campo; con varios puntos se fotografían todos y dos superpuestos cuentan
+    como uno. "Centrado" = el objeto queda dentro de la celda mínima de la red de posiciones que la
+    impresora puede alcanzar (red cuadrada de 12.5 µm), porque no puede centrar exacto. Para no
+    repetir fotos se guardan las posiciones fotografiadas y se descarta ir a una que coincida
+    (tolerancia 12.5 µm; se probó 25 µm). La detección probablemente cambie y se reutilice; el
+    centrado es una habilidad permanente del microscopio. XY siempre por moverse_a_xy().
+  Resultado (notas, 2026-10-22): escala medida en QVGA con la lente nueva, ~0.388 µm/px (campo de
+    93 x 124 µm). En correr_barrido_puntos.py FOV_X_MM y FOV_Y_MM estaban al revés (0.1243 y 0.09263):
+    los movimientos de centrado salían ~34% largos en x y ~25% cortos en y. Con la escala correcta
+    (0.09263, 0.1243), en el simulador con 36 puntos: 0 fotos duplicadas, 0 sin centrar, residuo
+    máximo 6.1 µm (con la escala al revés: 7 duplicadas, 17 sin centrar, residuo máximo 20.6 µm).
+    Subir la tolerancia de repetidos solo tapaba los duplicados; el centrado lo arregló la escala.
+    Diagnóstico visual del barrido: ConfigBarrido(guardar_imagenes=True, tolerancia_repetidos_um=25.0)
+    escribe <carpeta_salida>/diagnostico/{crudas,marcadas}/ y registro_visitados.json.
+  Estado: COMPLETAR (la última nota que hay es el diagnóstico del 2026-10-22).
+
+
+======================================================================================================
+E. PENDIENTES E IDEAS
+======================================================================================================
+  Orden
+   1. busqueda_muestra.py: el nombre no representa lo que contiene (autofocus, verificación de
+      presencia, búsqueda en Z, foco final multimétrica, posicionar_en_muestra). Decidir nombre y si
+      se parte.
+   2. Escala (µm/px) y campo visual por resolución: viven en una aplicación (FOV_X_MM, FOV_Y_MM) y en
+      notas. Pasarlos a camara_openmv.py (regla de centralización) y volver a medir en 4K con la lente
+      nueva.
+   3. Clase MicroscopioCosmos (26.10.16): decidir qué se queda, qué va a los base y qué a módulos de
+      combinación (REGLAS_CODIGO.txt, secciones 3 y 11), cuando Franco lo pida.
+   4. Main_server.py (raíz, 45 KB) y 26.08.27 servidor: clasificar.
+   5. Archivos sueltos en la raíz (output.png, la charla sobre pixi, etc.): decidir si se ordenan.
+   6. .gitignore solo ignora .pixi: los __pycache__ aparecen como archivos sin seguimiento.
+  Calibración
+   7. CRITERIOS_POR_DEFECTO (laplacian 12, tenengrad 200, varianza 30): el comentario del código dice
+      que dejaron de valer; los valores anteriores quedaron comentados (6.35 / 70 / 10.35).
+      Recalibrar con imágenes clasificadas.
+  Técnicos
+   8. Sincronización con la impresora: confirmar en el equipo que M400 + M114 espera de verdad (las
+      notas de oct. lo daban sin resolver).
+   9. home() y el fin de movimiento (EN PRUEBA, Franco): G28 emite por sí solo una línea de posición
+      como la de M114; Franco sospecha que son dos. Síntoma: la celda termina de correr y la
+      impresora sigue moviéndose.
+      Hipótesis (Claude, sin verificar en el equipo): esperar_fin_movimiento() no vacía el buffer. Si
+      G28 emite una línea más de las que home() lee, esa línea queda esperando; la siguiente espera
+      la toma como la respuesta de SU M114 y vuelve antes de tiempo, y la respuesta real queda para
+      la espera que sigue. Desde ahí TODAS las esperas quedan corridas un paso (cada una devuelve el
+      control cuando termina el movimiento anterior). Con el home() viejo, el simulador reproduce esto.
+      Cambio en prueba: home() lee dos líneas (G28, M400, espera, M400, espera). Si G28 emite solo una,
+      la segunda espera agota el timeout (15 s) y devuelve None: queda alineado pero lento; si emite
+      tres o más, el desfase vuelve.
+      Falta medir: cuántas líneas emite G28 y cuándo llegan (registrar cada línea cruda con su hora).
+      Con eso se fija el número (y SerialFalso.lineas_por_g28). Alternativas a evaluar si contar
+      líneas resulta frágil: vaciar el buffer de entrada antes de mandar cada orden que se espera, o
+      dejar pasar un instante y vaciarlo después de G28.
+  10. Docstrings: los métodos de OpenMVCamera casi no tienen; el índice de API los muestra sin
+      descripción.
+  11. tests/: falta simular buscar_muestra_en_z, foco_final_multimetrica y posicionar_en_muestra de
+      punta a punta (hoy solo se prueba autofocus y se chequean nombres sin definir).
+  12. Servidor web en Raspberry Pi para elegir la foto mejor enfocada (plan; hardware y puertos por
+      definir).
+  13. Parásitos: preparado fijo primero, después vivos por movimiento (hoja de ruta).
+  14. Actualizar las aplicaciones que importan nombres que ya no existen, solo cuando Franco lo pida
+      (sección C).
+
+
+======================================================================================================
+F. PLANTILLA DE ENTRADA (para completar desde el chat de cada aplicación)
+======================================================================================================
+  [YY.MM.DD] <descripción de la carpeta>
+    Archivos: <los que importan>
+    Base que usa: <módulos y nombres; ver sección C>
+    Objetivo: <qué se quería lograr>
+    Enfoque: <qué se propuso para resolverlo, y por qué>
+    Resultado: <a qué se llegó; números medidos; qué funcionó y qué no> (fechas aproximadas)
+    Hallazgos para el futuro: <lo aprendido que conviene no olvidar>
+    Propuestas para la base: <funciones o constantes que podrían incorporarse>
+    Estado: EN PRUEBA | FUNCIONA | NO PROBADA | ABANDONADA
+    Pendiente: <lo que falta>

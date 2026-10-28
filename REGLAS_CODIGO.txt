@@ -1,0 +1,219 @@
+REGLAS_CODIGO.txt -- Reglas para escribir y modificar código en env_labo7
+Versión: 2026-10-27 (Franco + Claude)
+
+CÓMO USAR ESTE ARCHIVO
+  Pegarlo, junto con PROYECTO_CONTEXTO.txt, al empezar un chat nuevo. Rige para todo el código nuevo.
+  Quien decide es Franco: ante una duda sobre estas reglas, preguntar; no improvisar.
+  Cuando algo de acá cambie, actualizar este archivo y anotarlo en BITACORA.txt.
+
+
+1. MODELO: BASE Y APLICACIONES
+  BASE = los módulos de la raíz (camara_openmv, impresora_cosmos, metricas_imagen, busqueda_muestra;
+  main_openmv es el firmware de la placa). Definen qué pueden hacer los instrumentos y las tareas
+  comunes. La lista actual y la API están en PROYECTO_CONTEXTO.txt.
+  APLICACIONES = carpetas "YY.MM.DD descripción". Usan la base y crean funciones propias, para
+  evaluar o para usar solo en esa aplicación. Son una etapa de prueba.
+  La meta de estas reglas es que una aplicación NUEVA ya nazca cumpliéndolas. Las aplicaciones
+  existentes no se tocan salvo pedido (sección 11).
+
+
+2. ÁRBOL DE DECISIÓN: ¿DÓNDE VA ESTA FUNCIÓN O VARIABLE?
+  Preguntar en este orden y parar en la primera que corresponda.
+
+  1) ¿Es una característica fija del hardware (offset, límite, resolución, pasos por mm, puerto,
+     formatos) o un valor definido con algún criterio (umbral de seguridad, criterios de detección)?
+     -> Vive UNA sola vez, en el módulo base que corresponda (ver 2 a 4). Las aplicaciones la leen
+        de ahí; nunca la redefinen (sección 4).
+  2) ¿Usa o mueve solo la impresora? (desplazamientos, posición, límites, reglas de seguridad en XY)
+     -> impresora_cosmos.py.
+        Ejemplos: desp_lin_000, moverse_a_xy, DISTANCIA_XY_SIN_SUBIR_MM.
+  3) ¿Usa solo la cámara? (comandos, configuración, captura, decodificar lo que la cámara entrega,
+     guardar o mostrar la foto)
+     -> camara_openmv.py.
+        Ejemplos: config_de_una, bytes_a_imagen, mostrar.
+  4) ¿Recibe una imagen (o un array) y devuelve números u otra imagen, sin tocar cámara ni impresora?
+     -> metricas_imagen.py si es una métrica o un criterio sobre métricas. Si es otro tema (por
+        ejemplo detectar objetos, comparar colores), un módulo de imagen nuevo con nombre descriptivo.
+        Ejemplos: laplacian_variance, varianza_intensidad, evaluar_criterios.
+  5) ¿Combina cámara + impresora para cumplir una tarea? (enfocar, buscar muestra, centrar, barrer)
+     -> un módulo de combinación con el nombre de la tarea; recibe `camara` e `impresora` por
+        parámetro. NO se agrega todo a busqueda_muestra.py: ahí solo va lo de buscar la muestra y
+        enfocar.
+        Ejemplos: autofocus, posicionar_en_muestra.
+  6) ¿Es específica de una sola aplicación, o todavía está en prueba?
+     -> se queda en la aplicación. Si sirve más allá, se la propone para la base (sección 5); lo
+        decide Franco.
+
+  Dependencias permitidas
+    - camara_openmv, impresora_cosmos y metricas_imagen NO importan ningún otro módulo del
+      proyecto (tests/test_estatico.py lo verifica).
+    - Los módulos de combinación pueden importar esos tres; reciben las instancias ya creadas y
+      nunca abren la conexión serie.
+    - Nadie importa main_openmv: corre en la placa.
+
+  Ante la duda sobre la categoría: elegir la más probable, decir en la respuesta dónde cayó cada
+  función y por qué, y proponer el movimiento. No mover nada de la base sin avisar.
+
+
+3. CLASES
+  - Las clases salen de la base: OpenMVCamera y TrimakerCOSMOS. Se usan directamente.
+  - No crear una clase nueva que solo envuelva, renombre o delegue métodos de las de la base:
+    complica los nombres sin agregar nada.
+  - Una clase propia de aplicación (por ejemplo MicroscopioCosmos en 26.10.16) no está mal en sí;
+    lo que importa es el orden:
+      a) no redefine ni duplica lo que la base ya tiene;
+      b) lo que solo toca la impresora o solo la cámara se propone para su módulo base;
+      c) lo que combina ambos va a un módulo de combinación, no queda como método de la clase.
+  - Estilo a imitar (Franco lo valoró en 26.10.16): archivos chicos, cada uno con una responsabilidad
+    y un nombre que dice lo que hace, en vez de un archivo gigante con todo mezclado.
+
+
+4. CONSTANTES Y CENTRALIZACIÓN
+  - Las aplicaciones no definen variables características de la impresora o de la cámara (el
+    desplazamiento mínimo en x/y, límites, offsets, pasos por mm, formatos, puertos). Las leen del
+    base: impresora.resolucion_x, impresora.max_posicion_z, DISTANCIA_XY_SIN_SUBIR_MM,
+    CRITERIOS_POR_DEFECTO, etc. (lista completa: "Atributos fijos" y "Constantes" del índice de API).
+  - Lo mismo para valores definidos con algún criterio (umbrales de seguridad, de detección).
+  - Si el base no tiene el dato que hace falta, la aplicación no lo inventa por su cuenta: se avisa a
+    Franco. Mientras tanto se define en UN solo bloque al principio de la aplicación, titulado
+    "PROPUESTAS PARA LA BASE", con valor, unidad, origen y fecha, y se anota en BITACORA.txt
+    (pendientes). Es una excepción acotada, no una forma de esquivar la regla.
+  - Hoy faltan en la base la escala (µm/px) y el campo visual de la cámara por resolución; están en
+    las aplicaciones (ver pendientes en BITACORA.txt).
+
+
+5. MODIFICAR LOS MÓDULOS BASE
+  - Desde una aplicación NO se modifica el original (la aplicación es una etapa de prueba). Si
+    necesita cambiar un módulo base, se copia a la carpeta de la aplicación y se modifica la copia.
+  - La copia lleva un encabezado que dice de qué archivo y fecha (o commit) se copió, y la lista de
+    lo que se agregó o cambió, para facilitar la lectura (plantilla en la sección 12).
+  - Si una herramienta de la aplicación contribuye lo suficiente, Franco pide incorporarla (una
+    parte específica o la aplicación entera). Recién ahí se toca el original.
+  - Los originales solo se modifican cuando Franco lo pide de forma explícita (incorporar, mover,
+    renombrar). Cada cambio en un original:
+      1. se anota en BITACORA.txt (registro de cambios y, si hubo renombre, tabla de nombres);
+      2. se regenera el índice:  python herramientas/generar_indice.py
+      3. se corren las pruebas:  python tests/correr_todo.py
+      4. se hace commit.
+
+
+6. RENOMBRES, MOVIMIENTOS Y COMPATIBILIDAD
+  - Al renombrar o mover una función pública: dejar `Antiguo: "<nombre>"` en el docstring de la
+    nueva, anotar viejo -> nuevo en la tabla de BITACORA.txt y actualizar a los módulos base que la
+    llamaban.
+  - NO dejar alias, reexports ni wrappers "por compatibilidad". Las aplicaciones viejas tienen que
+    fallar fuerte (ImportError, AttributeError, NameError) para que se vea qué actualizar. La tabla
+    de aplicaciones de la bitácora lista lo que quedó roto. Se arreglan solo cuando Franco lo pide.
+  - Con las funciones que mueven la platina es una cuestión de seguridad: un nombre viejo que sigue
+    "andando" gracias a un alias es un riesgo físico; tiene que fallar.
+
+
+7. SEGURIDAD FÍSICA (leer antes de escribir código que mueva la platina)
+  - Z: mayor Z = objetivo más lejos de la muestra. La distancia de trabajo del objetivo es de
+    300 µm, así que un error de décimas de milímetro choca contra la muestra.
+  - Todo código que baje Z recibe un límite inferior (z_min_seguridad) y lo respeta; autofocus() ya
+    lo hace y se restaura la Z inicial si no puede continuar. No se entrega código nuevo que baje Z
+    sin límite.
+  - Todo desplazamiento en XY entre campos visuales pasa por moverse_a_xy() (impresora_cosmos.py),
+    no por desp_lin_000() a mano. La regla: parado en el z de enfoque de un campo, un salto de hasta
+    DISTANCIA_XY_SIN_SUBIR_MM (hoy 0.4 mm) mantiene Z; uno más largo sube primero a z_seguro, se
+    mueve en XY y hay que volver a enfocar. Historia: validada con saltos de ~0.15 mm; subida a
+    0.4 mm el 2026-10-15 a pedido de Franco.
+  - Antes de mover: impresora.home(). Sin eso las posiciones son None.
+  - desp_lin_000() y desp_lin_cam() necesitan x, y y z numéricos los tres. Si el destino sale del
+    rango, se cancela con un aviso por pantalla y la función devuelve None SIN mover: el código que
+    sigue no puede asumir que se movió (consultar la posición).
+  - La platina solo se mueve en la grilla (12.5 µm en x/y, 2.5 µm en z) y redondea hacia abajo.
+    Calcular las posiciones sobre esa grilla.
+  - Código nuevo que mueve hardware: se prueba primero con tests/simuladores.py.
+
+
+8. CONVENCIONES DE CÓDIGO
+  Lenguaje y estilo
+    - Python. Nombres, comentarios, docstrings y mensajes en español (como la API actual:
+      desp_lin_000, esperar_fin_movimiento).
+    - Los módulos empiezan y terminan con `# %%` (celdas de VS Code), como los base.
+    - Constantes en MAYÚSCULAS a nivel de módulo; los parámetros con valor por defecto en la firma
+      (nada de valores mágicos adentro de la función).
+    - El flag `devolveme_la_respuesta` activa los prints de diagnóstico (convención de
+      impresora_cosmos).
+  Unidades
+    - mm para posiciones y desplazamientos (Z incluido). Cuando la unidad no es mm, va en el sufijo
+      del nombre: _um (µm), _us (microsegundos), _s (segundos), _db (decibeles).
+  Imágenes
+    - Arrays de numpy: 2D si es GRAYSCALE; 3D en orden BGR si es color (como entrega
+      camara_openmv.bytes_a_imagen). RGB solo para mostrar con matplotlib (mostrar() convierte).
+    - Alto = filas = eje x de la impresora; ancho = columnas = eje y.
+  Documentación
+    - Docstring: la PRIMERA LÍNEA dice qué hace (la usa el índice de API autogenerado); después el
+      por qué y los casos raros. Una función sin docstring aparece en el índice sin descripción.
+    - Constantes con historia: comentario "Historia del umbral: ..." (como DISTANCIA_XY_SIN_SUBIR_MM).
+    - Excepciones propias: el docstring dice cuándo se lanzan (como PicoNoConfirmado).
+  Nombres de archivos y carpetas
+    - Archivo = lo que hace, sin prefijo "claude_".
+    - Carpetas de aplicación: "YY.MM.DD descripción" con la fecha de inicio.
+
+
+9. TESTS
+  - La carpeta tests/ es de Claude: se puede modificar con libertad. Correr todo:
+      python tests/correr_todo.py        (o:  pixi run python tests/correr_todo.py)
+    Filtrar por nombre de archivo:  python tests/correr_todo.py impresora
+  - tests/simuladores.py trae una impresora real (TrimakerCOSMOS) sobre un puerto serie falso, una
+    cámara falsa con un plano de foco simulado y un firmware falso. Reutilizarlos y ampliarlos ahí
+    en vez de escribir un simulador nuevo en cada aplicación.
+  - test_estatico.py atrapa nombres sin definir después de mover código, imports indebidos, nombres
+    viejos y avisa si el índice de API quedó desactualizado.
+  - Antes de dar por terminado un cambio en un base: correr todo. Función nueva en un base: agregar
+    su prueba. Si una prueba falla por un cambio intencional, se actualiza la prueba y se anota por
+    qué en la bitácora.
+  - Lo que NO prueban: tiempos reales de movimiento, el comportamiento de M400/M114 en el firmware
+    Repetier, ruido y óptica reales. Pasar los tests no reemplaza la prueba en el equipo.
+
+
+10. CÓMO TRABAJA CLAUDE EN ESTE REPO
+  - Leer PROYECTO_CONTEXTO.txt (incluye el índice de API) antes de escribir, para no reinventar lo
+    que ya existe. Aplicar el árbol de la sección 2 y decir en la respuesta dónde cayó cada función.
+  - No tocar aplicaciones salvo pedido explícito. No tocar los originales de la base salvo pedido
+    explícito.
+  - No refactorizar ni "limpiar" antes de que Franco pruebe en el equipo.
+  - Commits: Franco autorizó el 2026-10-27 a commitear sin preguntar. Mensajes claros en español;
+    agregar solo los archivos tocados (nunca `git add -A`: hay archivos de Franco sin seguimiento);
+    no hacer push salvo que lo pida.
+  - Bitácora: al terminar o retomar una aplicación, actualizar su entrada; al tocar la base,
+    actualizar el registro de cambios.
+  - Ante un cambio grande o ambiguo: proponer con una recomendación y preguntar antes de hacerlo.
+
+
+11. PROCEDIMIENTO PARA ADECUAR UNA APLICACIÓN EXISTENTE (solo si Franco lo pide, una por vez)
+  1. Mirar su fila en la tabla de aplicaciones de BITACORA.txt: qué nombres faltan o están
+     descontinuados.
+  2. Para cada nombre, buscar el nuevo en la tabla de renombres de la bitácora; actualizar los
+     imports y las llamadas.
+  3. Reemplazar por lecturas del base las constantes del hardware que la aplicación definió por su
+     cuenta (sección 4).
+  4. Clasificar cada función o variable de la aplicación con el árbol (sección 2). Proponer a Franco
+     las que van a la base; pasar a módulos de combinación nuevos las que mezclan cámara e
+     impresora. Nada va al original de la base sin su OK.
+  5. Si la aplicación define clases propias, aplicar la sección 3.
+  6. Poner el encabezado de la sección 12 y completar su entrada en la bitácora.
+  7. Correr tests/ y, si la aplicación tiene simulador propio, su prueba.
+
+
+12. PLANTILLAS
+
+  Encabezado de una aplicación nueva (docstring al principio del archivo principal)
+    """
+    <Nombre> -- una línea de qué hace.
+    Carpeta: YY.MM.DD descripción          Inicio: AAAA-MM-DD
+    Objetivo: ...
+    Enfoque (qué se propone para resolverlo): ...
+    Módulos base que usa: camara_openmv (OpenMVCamera), impresora_cosmos (TrimakerCOSMOS,
+        moverse_a_xy), metricas_imagen (...), ...
+    Propuestas para la base (si hay): <función o constante> -- por qué sirve.
+    Estado: EN PRUEBA | FUNCIONA | ABANDONADA        Resultado: ...
+    """
+
+  Encabezado de una COPIA de un módulo base dentro de una aplicación
+    # COPIA DE camara_openmv.py -- tomada el AAAA-MM-DD (commit abc1234)
+    # NOVEDADES RESPECTO DEL BASE:
+    #   - AAAA-MM-DD: <qué se agregó o cambió y por qué>

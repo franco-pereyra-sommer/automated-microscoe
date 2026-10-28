@@ -1,0 +1,208 @@
+PROYECTO_CONTEXTO.txt -- Contexto de env_labo7 (Laboratorio 7)
+Actualizado: 2026-10-27
+
+CÓMO USAR ESTE ARCHIVO
+  - Pegarlo, junto con REGLAS_CODIGO.txt, al empezar un chat nuevo. BITACORA.txt solo si el chat lo
+    necesita (o pegar solo la entrada de la aplicación que se va a retomar).
+  - Idioma: español. Código: Python, salvo que se pida otro lenguaje.
+  - La sección 7 (índice de API) es autogenerada: python herramientas/generar_indice.py
+    Regenerarla después de tocar un módulo base. No editarla a mano.
+  - Lo marcado "(a confirmar)" viene de notas de chats anteriores y no está verificado en el código.
+
+
+1. OBJETIVO
+  Un microscopio que barre una muestra automáticamente. La muestra son glóbulos rojos; la meta a
+  largo plazo es encontrar parásitos vivos, que se reconocen por su movimiento y no solo por su
+  forma. El sistema óptico (OpenMV H7 PLUS + dos lentes M12 + objetivo x40) está montado en el
+  extrusor (sin las piezas que expulsan el plástico caliente) de la impresora Trimaker COSMOS,
+  que mueve la cámara en x, y, z. La impresora la controla una placa con Repetier Firmware 0.92.3.
+  La muestra queda quieta; lo que se mueve es la cámara.
+
+
+2. HARDWARE Y DATOS MEDIDOS
+  Fuente: el código de los módulos base (verificable) salvo donde dice "nota".
+
+  Ejes y límites (impresora_cosmos.py, TrimakerCOSMOS)
+    - Rango: x 0..270 mm, y 0..198 mm, z 0..150 mm. Offsets sobre el sistema interno de la
+      impresora: x -19, y -3, z 0 (los suma el código; en la aplicación se trabaja sin offsets).
+    - Grilla de movimiento: 12.5 µm en x e y (80 pasos/mm), 2.5 µm en z (400 pasos/mm). Lo que se
+      pide se redondea HACIA ABAJO a esa grilla.
+    - home() deja la cámara en (0, 0, 40). Sin home() la posición es None y casi todo falla.
+    - Fin de movimiento: cada orden que se espera manda M400 + M114 y bloquea hasta leer UNA línea de
+      posición; el buffer de entrada no se vacía. Si queda una línea de más (G28 emite la suya),
+      todas las esperas siguientes vuelven un movimiento antes. Es el punto en prueba hoy: ver
+      BITACORA.txt, pendiente 9.
+    - Mayor Z = objetivo MÁS LEJOS de la muestra (más seguro). Distancia de trabajo del objetivo:
+      300 µm (nota). Por eso los límites de Z son críticos (ver REGLAS_CODIGO.txt, sección 7).
+    - Comunicación: impresora por puerto serie a 250000 baudios; cámara a 115200 (puerto por
+      defecto "COM7").
+
+  Imagen (camara_openmv.py)
+    - Formatos de pixel: JPEG, RGB565, GRAYSCALE. Resoluciones: QQVGA, QVGA, VGA, HD, FHD, WQXGA2
+      (también se acepta "4K" como alias de WQXGA2).
+    - Los arrays de numpy que entrega bytes_a_imagen() son 2D si es GRAYSCALE y 3D en orden BGR si
+      es color.
+    - Ejes cámara-impresora (nota, 2026-10-22): x de la impresora = filas de la imagen; y =
+      columnas; signos +1/+1. Un objeto por debajo del centro de la imagen se centra con x+; uno a
+      la derecha, con y+.
+    - Escala medida en QVGA con la lente nueva (nota, 2026-10-22; moviendo la platina una distancia
+      conocida): ~0.388 µm/px, igual en filas y columnas. Campo visual: 93 µm en x (240 px) por
+      124 µm en y (320 px).
+    - Medida más vieja en 4K/WQXGA2 (nota, oct.): campo visual 0.214 mm (x) por 0.286 mm (y),
+      imprecisa. Verificar si sigue valiendo con la lente nueva.
+
+
+3. CÓMO SE TRABAJA
+  - Franco corre el código en su PC, en el entorno pixi (Python 3.13, numpy, opencv, matplotlib,
+    pyserial, pandas, seaborn, scikit-image; Windows) y le cuenta a Claude lo que imprime y los
+    números que midió. Esas observaciones de laboratorio son la verdad; las hipótesis se prueban
+    con diagnósticos cortos.
+  - Se prueba en el equipo antes de refactorizar o limpiar.
+  - Claude puede probar código sin hardware con tests/ (simuladores). Un test que pasa no
+    reemplaza la prueba en el equipo.
+  - Claude puede hacer commits cuando termina un cambio (autorizado por Franco el 2026-10-27).
+
+
+4. MAPA DEL PROYECTO
+  Dos partes: BASE (módulos de la raíz) y APLICACIONES (carpetas "YY.MM.DD descripción").
+
+  Módulos base (qué pueden hacer los instrumentos y las tareas comunes)
+    main_openmv.py     Firmware que corre EN la placa OpenMV (usa csi y pyb). No se importa desde
+                       la PC. Protocolo en la sección 8.
+    camara_openmv.py   OpenMVCamera: comandos a la cámara, captura, bytes_a_imagen(), mostrar,
+                       guardar, configuraciones. Enums PixFormat y Framesize.
+    impresora_cosmos.py  TrimakerCOSMOS: movimiento (desp_lin_000 / desp_lin_cam), home, posición,
+                       límites; moverse_a_xy() con la regla de seguridad en XY.
+    metricas_imagen.py Procesamiento de imagen sin hardware: métricas de enfoque/presencia
+                       (laplacian_variance, tenengrad, varianza_intensidad, intensidad_fondo) y
+                       criterios de detección.
+    busqueda_muestra.py  Combina cámara + impresora: autofocus, verificar_presencia_muestra,
+                       buscar_muestra_en_z, foco_final_multimetrica, posicionar_en_muestra.
+                       (Franco: el nombre no representa bien lo que contiene.)
+
+  Otras carpetas y archivos de la raíz
+    tests/             Simuladores (impresora real sobre serie falso, cámara falsa, firmware
+                       falso) y pruebas: python tests/correr_todo.py
+    herramientas/      generar_indice.py (regenera el índice de API y la tabla de apps).
+    Oudated code/      Código descontinuado (Main_*.py, main_openmv_*.py, metricas_enfoque*.py).
+                       El nombre de la carpeta lleva ese typo: se deja así.
+    Main_server.py     Sin clasificar (a confirmar con Franco; ver 26.08.27 servidor en la bitácora).
+
+  Aplicaciones: usan los módulos base y crean funciones propias para evaluar o para usar solo en
+  esa aplicación. Pueden estar desactualizadas respecto de la base; se actualizan solo si Franco
+  lo pide. Detalle por carpeta, cambios de la base y compatibilidad: BITACORA.txt.
+
+
+5. REGLAS EN SEIS LÍNEAS (detalle y justificación en REGLAS_CODIGO.txt)
+  1. Dónde va el código: solo impresora -> impresora_cosmos.py; solo cámara -> camara_openmv.py;
+     imagen pura -> metricas_imagen.py; combina cámara + impresora -> módulo nuevo con nombre
+     descriptivo (no todo a busqueda_muestra.py); específico de una aplicación -> queda en ella.
+  2. Las características del hardware y las constantes con criterio se leen SIEMPRE de los base;
+     las aplicaciones no las redefinen.
+  3. Los base originales no se tocan, ni se actualizan las apps, sin pedido de Franco. Nada de
+     alias de compatibilidad: lo viejo falla fuerte.
+  4. Seguridad: todo movimiento XY entre campos pasa por moverse_a_xy(); todo código que baja Z
+     recibe z_min_seguridad; mayor Z = más lejos.
+  5. Imágenes en BGR (RGB solo para matplotlib); unidades en mm con sufijo cuando no son mm.
+  6. Antes de entregar: correr tests/. Después de tocar un base: regenerar el índice y anotar en la
+     bitácora.
+
+
+6. HOJA DE RUTA (según lo dicho por Franco; a confirmar)
+  Hecho / en uso
+    - Búsqueda de muestra en Z (barrido grueso + confirmación) y autofoco global y local.
+    - Mosaico: barrido en espiral con campos superpuestos + reconstrucción (Fiji, Grid/Collection
+      Stitching).
+    - Detector de puntos violetas (glóbulos rojos teñidos, muy separados) en preparado fijo, con
+      centrado dentro de la celda de la grilla de la impresora y barrido sin repetir fotos.
+  Siguiente
+    - Parásitos dentro de un preparado fijo; después parásitos vivos (por su movimiento).
+    - Servidor web (plan: Raspberry Pi) para mostrar fotos/videos y elegir la foto mejor enfocada,
+      lo que también informa qué métrica de enfoque conviene confiar.
+  Pendientes técnicos y de orden: BITACORA.txt, sección E.
+
+
+7. ÍNDICE DE API DE LOS MÓDULOS BASE
+  Un renglón por clase/función pública (nombre, parámetros principales, qué hace). Antes de escribir
+  una función nueva, buscar acá si ya existe. "Atributos fijos" y "Constantes" son las
+  características del hardware y los umbrales que hay que leer de los base en vez de redefinir.
+
+#<<< INDICE_API (autogenerado: python herramientas/generar_indice.py -- no editar a mano) >>>
+Generado: 2026-10-28 02:43 (herramientas/generar_indice.py)
+
+camara_openmv.py -- Control de la cámara OpenMV H7 PLUS sobre el protocolo serie de texto que entiende "main_openmv.py" (el firmware corrido en la placa).
+  PixFormat (Enum): JPEG, RGB565, GRAYSCALE
+  Framesize (Enum): QQVGA, QVGA, VGA, HD, FHD, WQXGA2, K4
+  bytes_a_imagen(image_data) -- Decodifica los bytes que devuelve OpenMVCamera.capturar() a un array de numpy listo para OpenCV
+  class OpenMVCamera(puerto, baudrate, timeout)
+    .conectar()
+    .desconectar()
+    .capturar()
+    .set_pixformat(formato)
+    .descartar_frames(cantidad)
+    .set_framesize(resolucion)
+    .set_quality(quality)
+    .set_exposure_auto(enable)
+    .set_exposure(exposure_us)
+    .set_gain_auto(enable)
+    .set_gain(gain_db)
+    .set_whitebal_auto(enable)
+    .set_whitebal(red, green, blue)
+    .info()
+    .mostrar(image_data)
+    .guardar_imagen(image_data, carpeta, mostrar, nombre)
+    .guardar_bytes(image_data, carpeta, nombre)
+    .config_de_una(pixformat, resolucion, exposure_us, gain_db, whitebal, calidad, ... (+1)) -- exposure_us = 50000, gain_db = 25, whitebal = [66.22236, 61.43028, 60.206]
+    .config_autofoco_local(pixformat, exposure_us, gain_db)
+
+impresora_cosmos.py -- Control de la impresora Trimaker COSMOS (Repetier Firmware 0.92.3), usada como plataforma de posicionamiento (x, y, z) para el microscopio.
+  Constantes: DISTANCIA_XY_SIN_SUBIR_MM=0.4
+  class TrimakerCOSMOS(puerto, baudrate, clean_buffer, devolveme_la_respuesta)
+    Atributos fijos: offset_x=-19, offset_y=-3, offset_z=0, max_posicion_x=270, max_posicion_y=198, max_posicion_z=150, pasos_por_milimetro_eje_x=80, pasos_por_milimetro_eje_y=80, pasos_por_milimetro_eje_z=400, resolucion_x=0.0125, resolucion_y=0.0125, resolucion_z=0.0025
+    .escuchar(tiempo_maximo)
+    .actualizar_posicion_actual(x, y, z, tipo_de_cord, devolveme_la_respuesta)
+    .pregunta_posicion_actual(printear)
+    .pasos_a_mm(pasos_para_1_mm, cuantos_pasos_queres_hacer)
+    .ajustar_movimiento(valor, movimiento_en) -- Redondea 'valor' hacia abajo al múltiplo de la resolución del eje correspondiente (12.5 µm en x/y, 2.5 µm e...
+    .es_linea_de_posicion(line) -- True si la línea tiene el formato 'X:.. Y:.. Z:.. E:..' que manda M114.
+    .esperar_fin_movimiento(timeout) -- Manda M400 + M114 (desde desp_lin_000/desp_lin_cam/home, no acá adentro — ver el comentario en esos métodos...
+    .desp_lin_000(x, y, z, feedrate, pasos_de_motor, devolveme_la_respuesta, ... (+1)) -- Mueve la cámara a (x, y, z) ABSOLUTOS en mm (referencia fija a la impresora).
+    .desp_lin_cam(x, y, z, feedrate, pasos_de_motor, devolveme_la_respuesta, ... (+1)) -- Mueve la cámara (x, y, z) RELATIVOS en mm respecto de donde está (referencia sobre la cámara).
+    .home(devolveme_la_respuesta, devolveme_timepos)
+    .desconectar()
+  moverse_a_xy(impresora, x, y, z_seguro, distancia_sin_subir, feedrate_xy, ... (+2)) -- Lleva la platina a (x, y) aplicando la regla de arriba.
+
+metricas_imagen.py -- Métricas de imagen del proyecto: funciones que reciben una imagen (el array de numpy que entrega camara_openmv.bytes_a_imagen(): 2D si es GRAYSCALE, 3D en or...
+  Constantes: FUNCIONES_METRICA; CRITERIOS_POR_DEFECTO={'laplacian': 12, 'tenengrad': 200, 'varianza': 30}
+  intensidad_fondo(imagen)
+  laplacian_variance(imagen)
+  tenengrad(imagen)
+  varianza_intensidad(imagen)
+  evaluar_criterios(imagen, criterios) -- Devuelve (valores, disparados)
+
+busqueda_muestra.py
+  class MuestraNoEncontrada()
+  class CampoVisualSinMuestra() -- La verificación temprana (intensidad de fondo) indica que este (x, y) no tiene glóbulos rojos en ninguna al...
+  class RiesgoDeColision()
+  class PicoNoConfirmado() -- autofocus() no pudo confirmar el máximo que encontró: ni el barrido inicial ni la extensión (dentro de 'pas...
+  autofocus(camara, impresora, metrica, pasos_arriba, pasos_abajo, paso_z, ... (+8)) -- Barre en Z alrededor de la posición actual y devuelve la altura donde 'metrica' es máxima.
+  verificar_presencia_muestra(camara, impresora, z_arriba_seguro, z_min_seguridad, alturas_a_revisar, umbral_intensidad_fondo, ... (+3)) -- Chequeo rápido ANTES del barrido grueso: revisa unas pocas alturas de Z (con pixformat RGB565, que es como...
+  buscar_muestra_en_z(camara, impresora, z_arriba_seguro, z_min_seguridad, resolucion_global, pixformat_global, ... (+11)) -- Devuelve un diccionario
+  foco_final_multimetrica(camara, impresora, z_min_seguridad, z_max_seguro, paso_z, pasos_arriba, ... (+10)) -- Pensada para usarse justo después de que buscar_muestra_en_z() confirma una muestra (es decir, arrancando y...
+  posicionar_en_muestra(camara, impresora, x, y, z_arriba_seguro, z_min_seguridad, ... (+23)) -- Automatiza el flujo completo para una posición (x, y)
+#<<< FIN_INDICE_API >>>
+
+
+8. PROTOCOLO DEL FIRMWARE DE LA CÁMARA (main_openmv.py <-> OpenMVCamera)
+  Comandos de texto por USB, una línea por comando. Respuesta: "OK" o "ERR".
+    capture                                   La placa manda el tamaño en una línea; la PC contesta
+                                              "ok"; la placa manda los bytes de la imagen.
+    set_pixformat {JPEG|RGB565|GRAYSCALE}
+    set_framesize {QQVGA|QVGA|VGA|HD|FHD|WQXGA2}
+    set_quality <entero>
+    set_exposure_auto 1 | set_exposure_auto 0 <exposure_us>
+    set_gain_auto 1     | set_gain_auto 0 <gain_db>
+    set_whitebal_auto 1 | set_whitebal_auto 0 <r> <g> <b>
+    info                                      Devuelve: <exposure_us> <gain_db> <rgb_gain_db>
+  En la PC no se arman a mano: se usan los métodos de OpenMVCamera (validan los textos antes de
+  mandarlos).
