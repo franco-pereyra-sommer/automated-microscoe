@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Módulos base del proyecto
-from camara_openmv import bytes_a_imagen
+from camara_openmv import bytes_a_imagen, validar_dict_params_camara
 from metricas_imagen import (
     CRITERIOS_POR_DEFECTO,
     FUNCIONES_METRICA,
@@ -479,8 +479,7 @@ def buscar_muestra_en_z(
     impresora,
     z_arriba_seguro,
     z_min_seguridad,
-    resolucion_global="QVGA",
-    pixformat_global="GRAYSCALE",
+    dict_params_global,
     paso_grueso=0.005,
     paso_fino=0.0025,
     criterios_deteccion=None,
@@ -502,6 +501,14 @@ def buscar_muestra_en_z(
             "historial_barrido_grueso": [...],
         }
 
+    'dict_params_global': diccionario con los parámetros de la cámara
+    para todo el barrido (pixformat, resolucion, exposure_us, gain_db,
+    whitebal; ver OpenMVCamera.config_de_una()). Es obligatorio. Se
+    valida antes de mover nada. Lo usan el barrido grueso y la
+    confirmación (autofocus()); la verificación temprana solo toma de
+    ahí la resolución (siempre revisa en RGB565, que es como se calibró
+    su umbral).
+
     Supuestos de seguridad (¡no tocar sin revisar el hardware!):
     - Z creciente = alejarse de la muestra (más seguro).
     - Z decreciente = acercarse a la muestra (más riesgo de choque).
@@ -520,8 +527,8 @@ def buscar_muestra_en_z(
     como un OR (alcanza con que una sola supere su umbral).
 
     Fase 2: al primer disparo, corre autofocus() con la métrica que
-    disparó, en el mismo resolucion_global/pixformat_global pero con
-    'paso_fino', para encontrar y confirmar estructuralmente el máximo
+    disparó, con la misma configuración de cámara ('dict_params_global')
+    pero con 'paso_fino', para encontrar y confirmar estructuralmente el máximo
     local (ver la docstring de autofocus() para el criterio de
     confirmación). Si autofocus() no logra confirmarlo
     (PicoNoConfirmado) o el máximo confirmado no supera umbral × (1 +
@@ -531,6 +538,8 @@ def buscar_muestra_en_z(
     queda confirmado (y ya posicionado ahí, porque autofocus() deja al
     equipo en su propio máximo).
     """
+
+    validar_dict_params_camara(dict_params_global, "dict_params_global")
 
     if criterios_deteccion is None:
         criterios_deteccion = dict(CRITERIOS_POR_DEFECTO)
@@ -584,7 +593,7 @@ def buscar_muestra_en_z(
             z_min_seguridad=z_min_seguridad,
             alturas_a_revisar=alturas_verificacion,
             umbral_intensidad_fondo=umbral_intensidad_fondo,
-            resolucion=resolucion_global,
+            resolucion=dict_params_global["resolucion"],
             espera_movimiento=espera_movimiento,
             devolveme_la_respuesta=devolveme_la_respuesta,
         )
@@ -611,10 +620,7 @@ def buscar_muestra_en_z(
     # Fase 1 y 2: barrido grueso + confirmación
     # --------------------------------------------------------
 
-    camara.config_de_una(
-        pixformat=pixformat_global,
-        resolucion=resolucion_global,
-    )
+    camara.config_de_una(dict_params_global)
 
     historial = []
     resultado_confirmado = None
@@ -813,6 +819,8 @@ def _agrupar_maximos_por_z(resultados_por_metrica, tolerancia_z):
 def foco_final_multimetrica(
     camara,
     impresora,
+    dict_params_grayscale,
+    dict_params_color,
     z_min_seguridad,
     z_max_seguro=None,
     paso_z=0.0025,
@@ -821,9 +829,6 @@ def foco_final_multimetrica(
     vecinos_para_confirmar=3,
     pasos_extension_maxima=5,
     espera_movimiento=0.5,
-    resolucion_grayscale="QVGA",
-    pixformat_color="RGB565",
-    resolucion_color="WQXGA2",  # alias: "4K"
     guardamos=False,
     carpeta_guardado=None,
     graficamos=True,
@@ -831,10 +836,22 @@ def foco_final_multimetrica(
     """
     Pensada para usarse justo después de que buscar_muestra_en_z()
     confirma una muestra (es decir, arrancando ya cerca del plano de
-    foco). Barre en Z UNA sola vez, en GRAYSCALE, evaluando las tres
+    foco). Barre en Z UNA sola vez, con la cámara configurada con
+    'dict_params_grayscale' (pensada para GRAYSCALE), evaluando las tres
     métricas disponibles (laplacian_variance, tenengrad,
     varianza_intensidad) sobre cada foto -- no hace tres barridos
     separados, reusa las mismas fotos para las tres.
+
+    'dict_params_grayscale' y 'dict_params_color' son diccionarios con
+    los parámetros de la cámara (pixformat, resolucion, exposure_us,
+    gain_db, whitebal; ver OpenMVCamera.config_de_una()). Son
+    obligatorios y se validan antes de mover nada. Por ejemplo:
+        dict_params_grayscale = {"pixformat": "GRAYSCALE", "resolucion": "QVGA",
+                                 "exposure_us": 50000, "gain_db": 25,
+                                 "whitebal": (66.22236, 61.43028, 60.206)}
+        dict_params_color = {"pixformat": "RGB565", "resolucion": "WQXGA2",
+                             "exposure_us": 50000, "gain_db": 25,
+                             "whitebal": (66.22236, 61.43028, 60.206)}
 
     El máximo de cada métrica se confirma con el mismo criterio
     posicional que autofocus() (al menos 'vecinos_para_confirmar'
@@ -848,16 +865,16 @@ def foco_final_multimetrica(
     resultado (no se levanta ninguna excepción: a esta altura ya se
     sabe que hay muestra, así que no tiene sentido abortar).
 
-    Después va a la altura del máximo de cada métrica, cambia a
-    'pixformat_color'/'resolucion_color' (por defecto RGB565 a
-    "WQXGA2", o sea "4K") y saca ahí la foto de mayor calidad. Si dos
+    Después va a la altura del máximo de cada métrica, configura la
+    cámara con 'dict_params_color' (por ejemplo RGB565 a "WQXGA2", o
+    sea "4K") y saca ahí la foto de mayor calidad. Si dos
     o tres métricas comparten el mismo Z (a 'paso_z' de diferencia o
     menos), se saca una sola foto para ese grupo y se la etiqueta con
     todas las métricas que coinciden, en vez de repetir la foto.
 
     Si 'guardamos' es True, además de esa foto del máximo:
 
-      - Se guardan, también en 'pixformat_color'/'resolucion_color',
+      - Se guardan, también con 'dict_params_color',
         las fotos de las alturas vecinas: las 'vecinos_para_confirmar'
         alturas (de a 'paso_z') de cada lado del máximo de cada métrica,
         o sea las mismas que miró el criterio de confirmación. Con
@@ -899,6 +916,11 @@ def foco_final_multimetrica(
         }
     """
 
+    # Los dos diccionarios se revisan ahora: el de color recién se usa
+    # después de barrer, y un error ahí dejaría la platina a mitad de camino.
+    validar_dict_params_camara(dict_params_grayscale, "dict_params_grayscale")
+    validar_dict_params_camara(dict_params_color, "dict_params_color")
+
     if guardamos and carpeta_guardado is None:
         raise ValueError(
             "Si 'guardamos' es True hay que pasar 'carpeta_guardado'"
@@ -921,10 +943,10 @@ def foco_final_multimetrica(
         pasos_arriba = max(min(pasos_arriba, pasos_arriba_max), 0)
 
     # --------------------------------------------------------
-    # Barrido inicial en GRAYSCALE, evaluando las tres métricas
+    # Barrido inicial (dict_params_grayscale), evaluando las tres métricas
     # --------------------------------------------------------
 
-    camara.config_de_una(pixformat="GRAYSCALE", resolucion=resolucion_grayscale)
+    camara.config_de_una(dict_params_grayscale)
 
     posiciones_z = []
     valores_por_metrica = {nombre: [] for nombre in FUNCIONES_METRICA}
@@ -1070,7 +1092,7 @@ def foco_final_multimetrica(
         }
 
     # --------------------------------------------------------
-    # Fotos en alta calidad (color, 'resolucion_color')
+    # Fotos en alta calidad (color, 'dict_params_color')
     #
     # Las alturas se arman sobre la grilla del barrido (múltiplos de
     # paso_z a partir de posiciones_z[0]; 'j' es el índice entero de la
@@ -1138,7 +1160,7 @@ def foco_final_multimetrica(
             f"{alturas_omitidas}"
         )
 
-    camara.config_de_una(pixformat=pixformat_color, resolucion=resolucion_color)
+    camara.config_de_una(dict_params_color)
 
     archivos_por_indice = {}
 
@@ -1297,9 +1319,8 @@ def posicionar_en_muestra(
     y,
     z_arriba_seguro,
     z_min_seguridad,
-    resolucion_global="QVGA",
-    resolucion_local=None,
-    pixformat_global="GRAYSCALE",
+    dict_params_global,
+    dict_params_local=None,
     paso_grueso=0.005,
     paso_fino=0.0025,
     criterios_deteccion=None,
@@ -1317,18 +1338,31 @@ def posicionar_en_muestra(
     guardar_fotos_foco_final=False,
     carpeta_fotos_foco_final=None,
     foco_final_multimetrica_activado=False,
-    pixformat_color_foco_final="RGB565",
-    resolucion_color_foco_final="WQXGA2",
+    dict_params_color_foco_final=None,
     devolveme_la_respuesta=False,
 ):
     """
     Automatiza el flujo completo para una posición (x, y):
 
+    Parámetros de la cámara: se pasan como diccionarios (pixformat,
+    resolucion, exposure_us, gain_db, whitebal; ver
+    OpenMVCamera.config_de_una()), que se validan antes de mover nada:
+      - 'dict_params_global' (obligatorio): la búsqueda de la muestra
+        (paso 2).
+      - 'dict_params_local' (opcional): el foco final (paso 3). Si es
+        None, el foco final sigue con 'dict_params_global' (en el modo
+        de una sola métrica no se reconfigura la cámara; en el
+        multimétrica es el diccionario del barrido, el
+        'dict_params_grayscale' de foco_final_multimetrica()).
+      - 'dict_params_color_foco_final': las fotos en color de alta
+        resolución del foco final multimétrica. Obligatorio solo si
+        'hacer_foco_final' y 'foco_final_multimetrica_activado' son True.
+
     1) Sube a altura segura y se mueve en XY.
     2) buscar_muestra_en_z(): verificación temprana + barrido grueso
        + confirmación anti-señal-falsa (ver esa función).
-    3) (Opcional) foco final, en 'resolucion_local' (por defecto, la
-       misma que 'resolucion_global'), alrededor del Z confirmado.
+    3) (Opcional) foco final, con 'dict_params_local' (por defecto, el
+       mismo que 'dict_params_global'), alrededor del Z confirmado.
        Dos modos, elegidos con 'foco_final_multimetrica_activado':
          - False (default): autofocus() de una sola métrica (la
            misma que confirmó la muestra, salvo que se pase
@@ -1336,8 +1370,8 @@ def posicionar_en_muestra(
          - True: foco_final_multimetrica() -- confirma el máximo de
            las tres métricas (laplacian, tenengrad, varianza) con un
            solo barrido, y saca una foto en color de alta resolución
-           ('pixformat_color_foco_final'/'resolucion_color_foco_final')
-           en cada una (agrupando las que coincidan en el mismo Z).
+           ('dict_params_color_foco_final') en cada una (agrupando
+           las que coincidan en el mismo Z).
 
     Si 'guardar_fotos_foco_final' es True, las fotos del foco final
     se guardan dentro de 'carpeta_fotos_foco_final' -- en el modo de
@@ -1349,8 +1383,22 @@ def posicionar_en_muestra(
     foco_final_multimetrica()).
     """
 
-    if resolucion_local is None:
-        resolucion_local = resolucion_global
+    # Los diccionarios se validan antes de mover nada.
+    validar_dict_params_camara(dict_params_global, "dict_params_global")
+
+    if dict_params_local is not None:
+        validar_dict_params_camara(dict_params_local, "dict_params_local")
+
+    if hacer_foco_final and foco_final_multimetrica_activado:
+        if dict_params_color_foco_final is None:
+            raise ValueError(
+                "Con 'foco_final_multimetrica_activado' hay que pasar "
+                "'dict_params_color_foco_final' (los parámetros de la "
+                "cámara para las fotos en color)."
+            )
+        validar_dict_params_camara(
+            dict_params_color_foco_final, "dict_params_color_foco_final"
+        )
 
     # --------------------------------------------------------
     # 1) Altura segura antes de moverse en XY
@@ -1384,8 +1432,7 @@ def posicionar_en_muestra(
         impresora=impresora,
         z_arriba_seguro=z_arriba_seguro,
         z_min_seguridad=z_min_seguridad,
-        resolucion_global=resolucion_global,
-        pixformat_global=pixformat_global,
+        dict_params_global=dict_params_global,
         paso_grueso=paso_grueso,
         paso_fino=paso_fino,
         criterios_deteccion=criterios_deteccion,
@@ -1411,7 +1458,7 @@ def posicionar_en_muestra(
     }
 
     # --------------------------------------------------------
-    # 3) Foco final en resolucion_local
+    # 3) Foco final con dict_params_local
     # --------------------------------------------------------
 
     if hacer_foco_final and foco_final_multimetrica_activado:
@@ -1431,15 +1478,16 @@ def posicionar_en_muestra(
         resultado["foco_final_multimetrica"] = foco_final_multimetrica(
             camara=camara,
             impresora=impresora,
+            dict_params_grayscale=(
+                dict_params_local if dict_params_local is not None else dict_params_global
+            ),
+            dict_params_color=dict_params_color_foco_final,
             z_min_seguridad=z_min_seguridad,
             z_max_seguro=z_arriba_seguro,
             paso_z=paso_fino,
             pasos_arriba=pasos_arriba_foco_final,
             pasos_abajo=pasos_abajo_foco_final,
             espera_movimiento=espera_movimiento,
-            resolucion_grayscale=resolucion_local,
-            pixformat_color=pixformat_color_foco_final,
-            resolucion_color=resolucion_color_foco_final,
             guardamos=guardar_fotos_foco_final,
             carpeta_guardado=carpeta_guardado_final,
             graficamos=False,
@@ -1460,8 +1508,10 @@ def posicionar_en_muestra(
             0,
         )
 
-        camara.set_framesize(resolucion_local)
-        # pixformat sigue siendo pixformat_global, no hace falta cambiarlo
+        if dict_params_local is not None:
+            camara.config_de_una(dict_params_local)
+        # Sin dict_params_local la cámara ya está con dict_params_global
+        # (la dejó así buscar_muestra_en_z): no hace falta reconfigurarla.
 
         carpeta_guardado_final = None
 
@@ -1506,6 +1556,14 @@ def posicionar_en_muestra(
 # EJEMPLO DE USO
 # ============================================================
 
+# dict_params_grayscale = {
+#     "pixformat": "GRAYSCALE",
+#     "resolucion": "QVGA",
+#     "exposure_us": 50000,
+#     "gain_db": 25,
+#     "whitebal": (66.22236, 61.43028, 60.206),
+# }
+#
 # resultado = posicionar_en_muestra(
 #     camara=cam,
 #     impresora=grua,
@@ -1513,8 +1571,7 @@ def posicionar_en_muestra(
 #     y=100.0,
 #     z_arriba_seguro=27.9,   # MAYOR Z = más lejos de la muestra (seguro)
 #     z_min_seguridad=27.5,   # límite inferior, con margen del objetivo
-#     resolucion_global="QVGA",
-#     resolucion_local="QVGA",   # ajustar cuando la definas
+#     dict_params_global=dict_params_grayscale,
 #     hacer_foco_final=True,
 # )
 #

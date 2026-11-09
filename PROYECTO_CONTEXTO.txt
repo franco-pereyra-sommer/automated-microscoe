@@ -1,5 +1,5 @@
 PROYECTO_CONTEXTO.txt -- Contexto de env_labo7 (Laboratorio 7)
-Actualizado: 2026-10-27
+Actualizado: 2026-11-09
 
 CÓMO USAR ESTE ARCHIVO
   - Pegarlo, junto con REGLAS_CODIGO.txt, al empezar un chat nuevo. BITACORA.txt solo si el chat lo
@@ -16,7 +16,7 @@ CÓMO USAR ESTE ARCHIVO
   forma. El sistema óptico (OpenMV H7 PLUS + dos lentes M12 + objetivo x40) está montado en el
   extrusor (sin las piezas que expulsan el plástico caliente) de la impresora Trimaker COSMOS,
   que mueve la cámara en x, y, z. La impresora la controla una placa con Repetier Firmware 0.92.3.
-  La muestra queda quieta; lo que se mueve es la cámara.
+  La muestra queda quieta; lo que se mueve es la cámara. ("""Franco: el extrusor de la cama se mueve en x, y "y" la plataforma de impresión se mueve en z. El único movimiento que aleja y acerca el obejetivo con la muestra es el del eje z (suponiendo que el plano x-y "y" la cama son paralelos)""")
 
 
 2. HARDWARE Y DATOS MEDIDOS
@@ -42,6 +42,15 @@ CÓMO USAR ESTE ARCHIVO
       (también se acepta "4K" como alias de WQXGA2).
     - Los arrays de numpy que entrega bytes_a_imagen() son 2D si es GRAYSCALE y 3D en orden BGR si
       es color.
+    - Parámetros de la cámara (desde 2026-11-09): se pasan SIEMPRE como un diccionario con las cinco
+      claves pixformat, resolucion, exposure_us, gain_db y whitebal, todas obligatorias; None en
+      exposure_us, gain_db o whitebal pide el modo automático y hay que escribirlo a propósito.
+      OpenMVCamera.config_de_una(dict_params) lo valida y lo aplica; las funciones de
+      busqueda_muestra reciben dict_params_global, dict_params_grayscale, dict_params_color, etc.
+      Antes lo que no se pasaba quedaba en automático sin que se notara.
+    - exposure_us, gain_db y whitebal se mandan tal como los informa info(): los "dB" son los del
+      registro de la cámara, y en whitebal 60.206 es neutro (20*log10(1024)) (nota, 2026-10-13,
+      medido con info()).
     - Ejes cámara-impresora (nota, 2026-10-22): x de la impresora = filas de la imagen; y =
       columnas; signos +1/+1. Un objeto por debajo del centro de la imagen se centra con x+; uno a
       la derecha, con y+.
@@ -85,7 +94,7 @@ CÓMO USAR ESTE ARCHIVO
                        falso) y pruebas: python tests/correr_todo.py
     herramientas/      generar_indice.py (regenera el índice de API y la tabla de apps).
     Oudated code/      Código descontinuado (Main_*.py, main_openmv_*.py, metricas_enfoque*.py).
-                       El nombre de la carpeta lleva ese typo: se deja así.
+                       El nombre de la carpeta lleva ese typo: se deja así. ("""Franco: Jajajaja, no cambiar""")
     Main_server.py     Sin clasificar (a confirmar con Franco; ver 26.08.27 servidor en la bitácora).
 
   Aplicaciones: usan los módulos base y crean funciones propias para evaluar o para usar solo en
@@ -128,11 +137,13 @@ CÓMO USAR ESTE ARCHIVO
   características del hardware y los umbrales que hay que leer de los base en vez de redefinir.
 
 #<<< INDICE_API (autogenerado: python herramientas/generar_indice.py -- no editar a mano) >>>
-Generado: 2026-10-28 02:43 (herramientas/generar_indice.py)
+Generado: 2026-11-09 18:12 (herramientas/generar_indice.py)
 
 camara_openmv.py -- Control de la cámara OpenMV H7 PLUS sobre el protocolo serie de texto que entiende "main_openmv.py" (el firmware corrido en la placa).
+  Constantes: CLAVES_DICT_PARAMS_CAMARA
   PixFormat (Enum): JPEG, RGB565, GRAYSCALE
   Framesize (Enum): QQVGA, QVGA, VGA, HD, FHD, WQXGA2, K4
+  validar_dict_params_camara(dict_params, nombre_parametro) -- Revisa un diccionario de parámetros de la cámara sin tocar la cámara ni el puerto serie.
   bytes_a_imagen(image_data) -- Decodifica los bytes que devuelve OpenMVCamera.capturar() a un array de numpy listo para OpenCV
   class OpenMVCamera(puerto, baudrate, timeout)
     .conectar()
@@ -152,7 +163,7 @@ camara_openmv.py -- Control de la cámara OpenMV H7 PLUS sobre el protocolo seri
     .mostrar(image_data)
     .guardar_imagen(image_data, carpeta, mostrar, nombre)
     .guardar_bytes(image_data, carpeta, nombre)
-    .config_de_una(pixformat, resolucion, exposure_us, gain_db, whitebal, calidad, ... (+1)) -- exposure_us = 50000, gain_db = 25, whitebal = [66.22236, 61.43028, 60.206]
+    .config_de_una(dict_params, calidad, skip) -- Configura la cámara de una sola vez con TODOS sus parámetros, que se le pasan en un diccionario.
     .config_autofoco_local(pixformat, exposure_us, gain_db)
 
 impresora_cosmos.py -- Control de la impresora Trimaker COSMOS (Repetier Firmware 0.92.3), usada como plataforma de posicionamiento (x, y, z) para el microscopio.
@@ -187,9 +198,9 @@ busqueda_muestra.py
   class PicoNoConfirmado() -- autofocus() no pudo confirmar el máximo que encontró: ni el barrido inicial ni la extensión (dentro de 'pas...
   autofocus(camara, impresora, metrica, pasos_arriba, pasos_abajo, paso_z, ... (+8)) -- Barre en Z alrededor de la posición actual y devuelve la altura donde 'metrica' es máxima.
   verificar_presencia_muestra(camara, impresora, z_arriba_seguro, z_min_seguridad, alturas_a_revisar, umbral_intensidad_fondo, ... (+3)) -- Chequeo rápido ANTES del barrido grueso: revisa unas pocas alturas de Z (con pixformat RGB565, que es como...
-  buscar_muestra_en_z(camara, impresora, z_arriba_seguro, z_min_seguridad, resolucion_global, pixformat_global, ... (+11)) -- Devuelve un diccionario
-  foco_final_multimetrica(camara, impresora, z_min_seguridad, z_max_seguro, paso_z, pasos_arriba, ... (+10)) -- Pensada para usarse justo después de que buscar_muestra_en_z() confirma una muestra (es decir, arrancando y...
-  posicionar_en_muestra(camara, impresora, x, y, z_arriba_seguro, z_min_seguridad, ... (+23)) -- Automatiza el flujo completo para una posición (x, y)
+  buscar_muestra_en_z(camara, impresora, z_arriba_seguro, z_min_seguridad, dict_params_global, paso_grueso, ... (+10)) -- Devuelve un diccionario
+  foco_final_multimetrica(camara, impresora, dict_params_grayscale, dict_params_color, z_min_seguridad, z_max_seguro, ... (+9)) -- Pensada para usarse justo después de que buscar_muestra_en_z() confirma una muestra (es decir, arrancando y...
+  posicionar_en_muestra(camara, impresora, x, y, z_arriba_seguro, z_min_seguridad, ... (+21)) -- Automatiza el flujo completo para una posición (x, y)
 #<<< FIN_INDICE_API >>>
 
 

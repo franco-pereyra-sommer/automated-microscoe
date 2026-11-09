@@ -22,6 +22,11 @@ Qué hay:
   - CamaraFalsa: reemplaza a OpenMVCamera en las funciones que combinan
     cámara + impresora; capturar() devuelve un JPEG cuyo enfoque depende de la
     Z de la impresora (hay un plano de foco simulado).
+  - CamaraFalsaConMuestra: una CamaraFalsa que VE una muestra (glóbulos y
+    puntos violetas al azar): la imagen depende de la posición (x, y) de la
+    impresora, con una escala µm/px y unos signos de ejes configurables. Sirve
+    para probar el centrado. Opcionalmente devuelve cuadros viejos (como una
+    cámara con el buffer sin vaciar). Agregada el 2026-10-29.
 
 Límites (lo que NO simulan): tiempos reales de movimiento, el comportamiento
 de M400/M114 del firmware Repetier (ni cuántas líneas de posición emite G28:
@@ -304,12 +309,19 @@ class CamaraFalsa:
     def set_framesize(self, resolucion):
         self.framesize = str(getattr(resolucion, "value", resolucion)).upper()
 
-    def config_de_una(self, **kwargs):
-        self.llamadas_config_de_una.append(kwargs)
-        if "pixformat" in kwargs:
-            self.set_pixformat(kwargs["pixformat"])
-        if "resolucion" in kwargs:
-            self.set_framesize(kwargs["resolucion"])
+    def config_de_una(self, dict_params, calidad=100, skip=2):
+        """
+        Igual que OpenMVCamera.config_de_una(): recibe el diccionario de parámetros y lo valida con la
+        MISMA función que la cámara real (así una llamada con el formato viejo, o con un diccionario
+        incompleto, falla acá como en el equipo). Guarda una copia de cada diccionario recibido, en orden,
+        en `llamadas_config_de_una`.
+        """
+        import camara_openmv
+
+        camara_openmv.validar_dict_params_camara(dict_params)
+        self.llamadas_config_de_una.append(dict(dict_params))
+        self.set_pixformat(dict_params["pixformat"])
+        self.set_framesize(dict_params["resolucion"])
 
     def descartar_frames(self, cantidad=2):
         pass
@@ -321,6 +333,92 @@ class CamaraFalsa:
         archivo.write_bytes(image_data)
         self.archivos_guardados.append(archivo)
         return archivo
+
+
+class CamaraFalsaConMuestra(CamaraFalsa):
+    """
+    Cámara falsa que VE una muestra: capturar() devuelve un JPEG a color de lo
+    que hay bajo la cámara en la posición (x, y) de la impresora
+    (impresora.posicion_x / posicion_y). Mover la impresora corre la imagen
+    como en el equipo, así que sirve para probar el centrado.
+
+    La muestra es un plano con glóbulos rosados al azar y algunos puntos
+    violetas, centrado en `origen_mm`. La escala (um_por_px_*) y los signos son
+    los REALES del microscopio simulado y pueden ser distintos de los que supone
+    el código que se prueba (así se comprueba que una escala mal puesta se nota).
+    Ejes (PROYECTO_CONTEXTO.txt): x de la impresora = filas de la imagen, y =
+    columnas; con signo +1, subir x lleva la cámara hacia abajo sobre la muestra.
+
+    frames_de_retraso: capturar() devuelve el cuadro de hace N capturas (una
+    cámara con cuadros viejos en el buffer). config_de_una() y descartar_frames()
+    sacan cuadros como en el equipo (config_de_una descarta `skip`), que es lo
+    que vacía ese buffer.
+
+    La Z no influye: la imagen siempre está enfocada.
+    """
+
+    def __init__(self, impresora, origen_mm=(150.0, 150.0), um_por_px_fila=0.386, um_por_px_col=0.388,
+                 signo_x=1, signo_y=1, alto=240, ancho=320, lado_um=500.0, um_por_px_mundo=0.25,
+                 frames_de_retraso=0, ruido=2.0, semilla=0):
+        super().__init__(impresora, z_foco=0.0, alto=alto, ancho=ancho, semilla=semilla)
+        self.origen_mm = origen_mm
+        self.um_por_px_fila, self.um_por_px_col = um_por_px_fila, um_por_px_col
+        self.signo_x, self.signo_y = signo_x, signo_y
+        self.alto, self.ancho = alto, ancho
+        self.um_por_px_mundo = um_por_px_mundo
+        self.frames_de_retraso = frames_de_retraso
+        self.ruido = ruido
+        self._ruido = np.random.default_rng(semilla + 1)
+        self._cuadros = []
+        self._mundo = self._construir_mundo(lado_um, semilla)
+
+    def _construir_mundo(self, lado_um, semilla):
+        n = int(lado_um / self.um_por_px_mundo)
+        generador = np.random.default_rng(semilla)
+        mundo = np.empty((n, n, 3), np.uint8)
+        mundo[:] = (240, 205, 215)                                    # plasma claro (RGB)
+        radio = max(2, int(3.6 / self.um_por_px_mundo))               # glóbulo de ~3.6 µm de radio
+        for _ in range(int(n * n / (radio * radio * 14))):
+            fila, col = (int(v) for v in generador.integers(0, n, 2))
+            color = tuple(int(np.clip(v + generador.normal(0, 10), 0, 255)) for v in (225, 140, 165))
+            cv2.circle(mundo, (col, fila), int(radio * generador.uniform(0.85, 1.15)), color, -1, cv2.LINE_AA)
+            cv2.circle(mundo, (col, fila), max(1, radio // 3), (235, 175, 195), -1, cv2.LINE_AA)
+        for _ in range(40):                                           # puntos violetas
+            fila, col = (int(v) for v in generador.integers(0, n, 2))
+            cv2.circle(mundo, (col, fila), max(2, int(3.0 / self.um_por_px_mundo)), (110, 40, 140), -1, cv2.LINE_AA)
+        return cv2.GaussianBlur(mundo, (0, 0), 1.0)
+
+    def _vista_rgb(self):
+        n = self._mundo.shape[0]
+        fila_mundo = n / 2 + (float(self.impresora.posicion_x) - self.origen_mm[0]) * 1000.0 / self.um_por_px_mundo
+        col_mundo = n / 2 + (float(self.impresora.posicion_y) - self.origen_mm[1]) * 1000.0 / self.um_por_px_mundo
+        ay = self.signo_x * self.um_por_px_mundo / self.um_por_px_fila      # filas de imagen por fila del mundo
+        ax = self.signo_y * self.um_por_px_mundo / self.um_por_px_col
+        centro_fila, centro_col = (self.alto - 1) / 2, (self.ancho - 1) / 2
+        matriz = np.array([[ax, 0, centro_col - ax * col_mundo], [0, ay, centro_fila - ay * fila_mundo]], np.float64)
+        vista = cv2.warpAffine(self._mundo, matriz, (self.ancho, self.alto), flags=cv2.INTER_LINEAR,
+                               borderMode=cv2.BORDER_REPLICATE)
+        con_ruido = vista.astype(np.float32) + self._ruido.normal(0, self.ruido, vista.shape)
+        return np.clip(con_ruido, 0, 255).astype(np.uint8)
+
+    def capturar(self):
+        self.capturas += 1
+        self._cuadros.append(self._vista_rgb())
+        del self._cuadros[:-(self.frames_de_retraso + 1)]
+        cuadro = self._cuadros[0]                  # el de hace N capturas (o el más viejo que haya)
+
+        if self.pixformat == "GRAYSCALE":
+            return a_jpeg(cv2.cvtColor(cuadro, cv2.COLOR_RGB2GRAY), "L")
+
+        return a_jpeg(cuadro, "RGB")
+
+    def descartar_frames(self, cantidad=2):
+        for _ in range(cantidad):
+            self.capturar()
+
+    def config_de_una(self, dict_params, calidad=100, skip=2):
+        super().config_de_una(dict_params, calidad=calidad, skip=skip)
+        self.descartar_frames(skip)
 
 
 # %%

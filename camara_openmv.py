@@ -18,6 +18,8 @@ legible, ACÁ, antes de mandar nada por el puerto serie.
 
 import enum
 import io
+import math
+import numbers
 import time
 from datetime import datetime
 from pathlib import Path
@@ -95,6 +97,83 @@ def _resolver_opcion(valor, enum_clase, nombre_parametro):
         f"{nombre_parametro} tiene que ser un string o un miembro de "
         f"{enum_clase.__name__}, no {type(valor).__name__}"
     )
+
+
+# Claves del diccionario de parámetros de la cámara (lo que recibe
+# OpenMVCamera.config_de_una y las funciones de los módulos de combinación
+# que configuran la cámara). Todas son obligatorias: exposure_us, gain_db y
+# whitebal aceptan None para pedir el modo automático, pero hay que escribirlo.
+CLAVES_DICT_PARAMS_CAMARA = ("pixformat", "resolucion", "exposure_us", "gain_db", "whitebal")
+
+
+def _es_numero(valor):
+    return (
+        isinstance(valor, numbers.Real)
+        and not isinstance(valor, bool)
+        and math.isfinite(valor)
+    )
+
+
+def validar_dict_params_camara(dict_params, nombre_parametro="dict_params"):
+    """
+    Revisa un diccionario de parámetros de la cámara sin tocar la cámara ni el puerto serie.
+
+    Es lo que usa config_de_una() antes de mandar el primer comando, y lo que usan las funciones que
+    mueven la platina para rechazar un diccionario malo ANTES de empezar a moverla (no a mitad de un
+    barrido). Tira TypeError si no es un diccionario (o si un valor tiene el tipo equivocado) y
+    ValueError si le faltan claves, le sobran, o un valor no es válido. 'nombre_parametro' es cómo
+    se llama el diccionario en quien lo recibió (sale en el mensaje de error).
+    """
+
+    if not isinstance(dict_params, dict):
+        raise TypeError(
+            f"{nombre_parametro} tiene que ser un diccionario con las claves "
+            f"{list(CLAVES_DICT_PARAMS_CAMARA)}, no {type(dict_params).__name__}."
+        )
+
+    faltan = [clave for clave in CLAVES_DICT_PARAMS_CAMARA if clave not in dict_params]
+    sobran = [clave for clave in dict_params if clave not in CLAVES_DICT_PARAMS_CAMARA]
+
+    if faltan or sobran:
+        detalle = []
+        if faltan:
+            detalle.append(
+                f"le faltan las claves {faltan} (son todas obligatorias: para dejar "
+                f"exposure_us, gain_db o whitebal en automático hay que poner None a propósito)"
+            )
+        if sobran:
+            detalle.append(f"tiene claves que no existen: {sobran} (las válidas son {list(CLAVES_DICT_PARAMS_CAMARA)})")
+        raise ValueError(f"{nombre_parametro} " + " y ".join(detalle) + ".")
+
+    _resolver_opcion(dict_params["pixformat"], PixFormat, f"{nombre_parametro}['pixformat']")
+    _resolver_opcion(dict_params["resolucion"], Framesize, f"{nombre_parametro}['resolucion']")
+
+    exposure_us = dict_params["exposure_us"]
+    if exposure_us is not None and not (_es_numero(exposure_us) and exposure_us > 0):
+        raise ValueError(
+            f"{nombre_parametro}['exposure_us'] tiene que ser un número positivo (microsegundos) "
+            f"o None para exposición automática, no {exposure_us!r}."
+        )
+
+    gain_db = dict_params["gain_db"]
+    if gain_db is not None and not _es_numero(gain_db):
+        raise ValueError(
+            f"{nombre_parametro}['gain_db'] tiene que ser un número o None para ganancia "
+            f"automática, no {gain_db!r}."
+        )
+
+    whitebal = dict_params["whitebal"]
+    if whitebal is not None:
+        try:
+            canales = tuple(whitebal)
+        except TypeError:
+            canales = None
+
+        if canales is None or len(canales) != 3 or not all(_es_numero(c) for c in canales):
+            raise ValueError(
+                f"{nombre_parametro}['whitebal'] tiene que ser (rojo, verde, azul), tres números, "
+                f"o None para balance de blancos automático, no {whitebal!r}."
+            )
 
 
 # ======================================================
@@ -503,24 +582,41 @@ class OpenMVCamera:
     # CONFIGURACIONES "DE UNA" PARA LOS CASOS DE USO HABITUALES
     # ======================================================
 
-    def config_de_una(
-        self,
-        pixformat="RGB565",
-        resolucion="WQXGA2",
-        exposure_us: float | None = None, #50000,
-        gain_db: int | None = None, #25,
-        whitebal: tuple[float, float, float] | None = None, #(66.22236, 61.43028, 60.206),
-        calidad=100,
-        skip: int = 2,
-    ):
-        '''
-        exposure_us = 50000,
-        gain_db = 25,
-        whitebal = [66.22236, 61.43028, 60.206]
-        '''
-        self.set_pixformat(pixformat)
-        self.set_framesize(resolucion)
+    def config_de_una(self, dict_params, calidad=100, skip=2):
+        """
+        Configura la cámara de una sola vez con TODOS sus parámetros, que se le pasan en un diccionario.
+
+        'dict_params' tiene que traer las cinco claves de CLAVES_DICT_PARAMS_CAMARA; no hay valores por
+        defecto, así que nada queda en automático por omisión:
+            {
+                "pixformat": "GRAYSCALE",            # o "RGB565" / "JPEG" (o PixFormat.<...>)
+                "resolucion": "QVGA",                # o "WQXGA2" / "4K" / ... (o Framesize.<...>)
+                "exposure_us": 50000,                # o None = exposición automática
+                "gain_db": 25,                       # o None = ganancia automática
+                "whitebal": (66.22236, 61.43028, 60.206),   # (rojo, verde, azul) o None = automático
+            }
+        Para dejar algo en automático hay que escribir None a propósito. exposure_us, gain_db y whitebal
+        son los números tal como los informa info() (en whitebal, 60.206 es neutro: 20*log10(1024)).
+
+        Se valida todo ANTES de mandar el primer comando (ver validar_dict_params_camara): un diccionario
+        incompleto, con una clave de más o con un valor inválido tira un error sin tocar la cámara.
+        Después se mandan pixformat, resolución, calidad JPEG ('calidad'), exposición, ganancia y balance
+        de blancos, y se descartan 'skip' cuadros para que el sensor se acomode.
+
+        Historia: hasta 2026-11-09 recibía los parámetros sueltos y los que no se pasaban quedaban en
+        automático sin que se notara. Ahora recibe el diccionario (sin alias del formato viejo: llamarla
+        como antes da TypeError).
+        """
+
+        validar_dict_params_camara(dict_params)
+
+        self.set_pixformat(dict_params["pixformat"])
+        self.set_framesize(dict_params["resolucion"])
         self.set_quality(calidad)
+
+        exposure_us = dict_params["exposure_us"]
+        gain_db = dict_params["gain_db"]
+        whitebal = dict_params["whitebal"]
 
         if exposure_us is None:
             self.set_exposure_auto(True)

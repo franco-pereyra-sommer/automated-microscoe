@@ -24,6 +24,47 @@ CÓMO USAR ESTE ARCHIVO
 A. REGISTRO DE CAMBIOS DE LOS MÓDULOS BASE
 ======================================================================================================
 
+2026-11-09  (Claude, a pedido de Franco: los parámetros de la cámara se pasan siempre explícitos)
+  - camara_openmv.py: OpenMVCamera.config_de_una() ahora recibe UN diccionario con todos los parámetros
+    de la cámara:  config_de_una(dict_params, calidad=100, skip=2). Claves pixformat, resolucion,
+    exposure_us, gain_db y whitebal, TODAS obligatorias; None en exposure_us, gain_db o whitebal pide
+    el modo automático y hay que escribirlo a propósito. Ya no tiene valores por defecto ni acepta los
+    parámetros sueltos (sin alias: llamarla como antes da TypeError). Motivo: lo que no se pasaba
+    quedaba en automático sin que se notara.
+  - NUEVOS en camara_openmv.py: validar_dict_params_camara(dict_params, nombre_parametro) -- revisa el
+    diccionario sin tocar la cámara; la usan config_de_una() y las funciones de busqueda_muestra para
+    rechazarlo ANTES de mover la platina -- y CLAVES_DICT_PARAMS_CAMARA.
+  - busqueda_muestra.py, parámetros que reemplazan a los de antes (ver tabla B):
+      buscar_muestra_en_z      dict_params_global (obligatorio, va después de z_min_seguridad).
+      foco_final_multimetrica  dict_params_grayscale y dict_params_color (obligatorios, van justo
+                               después de impresora).
+      posicionar_en_muestra    dict_params_global (obligatorio); dict_params_local (opcional: None = el
+                               foco final sigue con el global); dict_params_color_foco_final (obligatorio
+                               solo con foco_final_multimetrica_activado).
+    Cambio de comportamiento: en el modo de una métrica el foco final ya no manda set_framesize(); si se
+    pasa dict_params_local reconfigura la cámara con config_de_una(), y si no, no la toca (ya está con
+    el global).
+  - Sin cambios, a propósito: verificar_presencia_muestra() no usa config_de_una(): fija RGB565 y la
+    resolución (de dict_params_global) y no toca exposición, ganancia ni balance de blancos, que quedan
+    como estaban. config_autofoco_local() tampoco cambió. Ver pendiente 15.
+  - tests/: simuladores.py: CamaraFalsa.config_de_una() recibe el diccionario y lo valida con la MISMA
+    función que la cámara real. Pruebas nuevas en test_camara.py (config_de_una, validar_dict_params_camara)
+    y en test_busqueda.py (buscar_muestra_en_z, foco_final_multimetrica y posicionar_en_muestra con la
+    cámara falsa: qué diccionario recibe cada etapa, rechazo ANTES de mover, fotos vecinas y gráfico,
+    límites de seguridad). test_prueba_centrado.py: sus pruebas se OMITEN (no fallan) mientras
+    26.10.29 llame a config_de_una() con el formato viejo; vuelven a correr solas cuando se la adecue.
+  - La tabla de la sección C NO detecta este cambio: no cambió ningún nombre, solo las firmas. Quedan
+    rotas (TypeError / ValueError al llamar) las aplicaciones que llaman a config_de_una() con
+    parámetros sueltos -- 26.08.21 (aplic_config_param_cam_09_29.py y _10_16.py), 26.09.11
+    (aplic_guard_de_imag_cerca_del_foco_parasitos_10_13.py), 26.09.29 (barrido_espiral_10_02.py y los
+    claude_barrido_espiral*.py), 26.10.02 (aplic_tomando_fotos_del_borde.py, barrido_fotos_borde.py),
+    26.10.13 (HDR.py), 26.10.16 (adaptador_hardware.py, correr_barrido_puntos.py,
+    test_adaptador_hardware.py), 26.10.29 (prueba_centrado.py) -- y las que llaman a
+    buscar_muestra_en_z / foco_final_multimetrica / posicionar_en_muestra con resolucion_global,
+    pixformat_global, resolucion_local, resolucion_grayscale, pixformat_color(_foco_final) o
+    resolucion_color(_foco_final) (candidatas: las que importan esas funciones, sección C; falta
+    revisar cada llamada). Se arreglan solo cuando Franco lo pida (pendiente 14).
+
 2026-10-27  (Franco, cambio propio en impresora_cosmos.py; en prueba en el equipo)
   - home(): ahora manda G28 + M400 y espera una línea de posición; manda M400 otra vez y espera una
     segunda; después baja a Z=40 como antes. Con devolveme_timepos=True devuelve TRES tiempos
@@ -61,6 +102,18 @@ A. REGISTRO DE CAMBIOS DE LOS MÓDULOS BASE
     desp_lin_000.
   - metricas_enfoque.py (obsoleto) se movió a "Oudated code".
 
+2026-10-20  (Claude, a pedido de Franco; registrado el 2026-11-09)
+  - busqueda_muestra.foco_final_multimetrica(): con guardamos=True guarda además, con la configuración de
+    las fotos en color, las fotos de las alturas vecinas (vecinos_para_confirmar a cada lado del máximo de
+    cada métrica: con 3, como mínimo 7 fotos) y el gráfico de las tres métricas como PNG, en
+    carpeta_guardado. Cada altura se fotografía una sola vez; las que cruzarían z_min_seguridad /
+    z_max_seguro se omiten con un aviso. Nombres: foto del máximo "<métricas> (x, y, z)" (igual que
+    siempre); vecinas "<métricas> vecino +k (x, y, z)"; gráfico "plot metricas (x, y, z)" (con la z de
+    donde arrancó la función). La platina termina donde siempre: en el máximo del último grupo.
+    Devuelve además "archivo_plot" y, por métrica, "indice_en_barrido" y "archivos_ventana".
+    posicionar_en_muestra() en modo multimétrica con guardar_fotos_foco_final=True guarda todo eso en
+    cada punto (más tiempo por punto).
+
 2026-10-15  (según el comentario del código)
   - DISTANCIA_XY_SIN_SUBIR_MM: de 0.15 mm a 0.4 mm, a pedido de Franco (la regla se había validado
     con saltos de ~150 µm). Entonces vivía en busqueda_muestra.py.
@@ -75,6 +128,18 @@ B. NOMBRES VIEJOS -> NOMBRES NUEVOS
 ======================================================================================================
   Viejo                                              Nuevo
   -------------------------------------------------  ---------------------------------------------
+  Parámetros (2026-11-09; el nombre de la función no cambió, cambió cómo se le pasa la cámara):
+  OpenMVCamera.config_de_una(pixformat=, resolucion=, exposure_us=, gain_db=, whitebal=)
+                                                     OpenMVCamera.config_de_una(dict_params)  (diccionario con esas 5 claves, todas obligatorias)
+  buscar_muestra_en_z(resolucion_global=, pixformat_global=)
+                                                     buscar_muestra_en_z(dict_params_global=)
+  foco_final_multimetrica(resolucion_grayscale=, pixformat_color=, resolucion_color=)
+                                                     foco_final_multimetrica(dict_params_grayscale=, dict_params_color=)
+  posicionar_en_muestra(resolucion_global=, pixformat_global=, resolucion_local=,
+                        pixformat_color_foco_final=, resolucion_color_foco_final=)
+                                                     posicionar_en_muestra(dict_params_global=, dict_params_local=,
+                                                                           dict_params_color_foco_final=)
+  Funciones y clases:
   TrimakerCOSMOS.desp_lin_abs()                      TrimakerCOSMOS.desp_lin_000()
   TrimakerCOSMOS.desp_lin_rel()                      TrimakerCOSMOS.desp_lin_cam()
   busqueda_muestra.bytes_a_imagen                    camara_openmv.bytes_a_imagen
@@ -369,13 +434,20 @@ E. PENDIENTES E IDEAS
       dejar pasar un instante y vaciarlo después de G28.
   10. Docstrings: los métodos de OpenMVCamera casi no tienen; el índice de API los muestra sin
       descripción.
-  11. tests/: falta simular buscar_muestra_en_z, foco_final_multimetrica y posicionar_en_muestra de
-      punta a punta (hoy solo se prueba autofocus y se chequean nombres sin definir).
+  11. tests/: buscar_muestra_en_z, foco_final_multimetrica y posicionar_en_muestra tienen desde el
+      2026-11-09 pruebas básicas con la cámara falsa (diccionarios de cámara, rechazo antes de mover,
+      fotos vecinas y gráfico, límites). Falta cubrir más casos: señal falsa y extensión del barrido en
+      buscar_muestra_en_z, CampoVisualSinMuestra, y el modo de una métrica con guardado de fotos.
   12. Servidor web en Raspberry Pi para elegir la foto mejor enfocada (plan; hardware y puertos por
       definir).
   13. Parásitos: preparado fijo primero, después vivos por movimiento (hoja de ruta).
-  14. Actualizar las aplicaciones que importan nombres que ya no existen, solo cuando Franco lo pida
-      (sección C).
+  14. Actualizar las aplicaciones que importan nombres que ya no existen (sección C) y las que
+      quedaron rotas por el cambio de parámetros de cámara del 2026-11-09 (lista en el registro de
+      cambios, sección A; la tabla C no las detecta), solo cuando Franco lo pida.
+  15. Parámetros de cámara explícitos en lo que todavía no los pide: config_autofoco_local() deja
+      exposición y ganancia en automático si no se las pasan (y no tiene balance de blancos), y
+      verificar_presencia_muestra() no toca exposición, ganancia ni balance de blancos. Decidir si
+      pasan también a diccionarios (2026-11-09: no se tocaron, no estaba pedido).
 
 
 ======================================================================================================
