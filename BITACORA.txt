@@ -3,19 +3,18 @@ Creada: 2026-10-27
 
 CÓMO USAR ESTE ARCHIVO
   - Para un chat nuevo normalmente alcanza PROYECTO_CONTEXTO.txt + REGLAS_CODIGO.txt. Esta bitácora se
-    pega entera solo si hace falta; si no, pegar la entrada de la aplicación que se retoma.
-  - Cada aplicación se completa DESDE EL CHAT donde se trabajó: abrir ese chat y pedir "actualizá la
-    entrada de <carpeta> en BITACORA.txt" (plantilla en la sección F: objetivo, qué se propone,
-    a qué se llegó, fechas aproximadas, lo que digan los comentarios del código).
-  - Estados: EN PRUEBA | FUNCIONA | NO PROBADA | ABANDONADA. "COMPLETAR" = falta la entrada.
-    Si la aplicación usa módulos descontinuados o nombres que ya no existen, se ve en la sección C.
+    pega entera solo si hace falta; si no, pegar la línea de la aplicación que se retoma.
+  - Es un resumen a propósito: una línea por aplicación y su estado. El detalle (mediciones, gráficos,
+    qué se probó) está en el cuaderno de laboratorio de Franco, no acá.
+  - Estados de una aplicación: TERMINADO | EN PRUEBA | NO PROBADO | ABANDONADO. "?" = falta que Franco
+    lo confirme. Para cambiar uno alcanza con decirlo ("poné 26.10.29 como TERMINADO").
   - Las secciones C (tabla de aplicaciones) y el índice de API de PROYECTO_CONTEXTO.txt son
     AUTOGENERADAS: python herramientas/generar_indice.py. No editarlas a mano.
 
   A. Registro de cambios de los módulos base (lo más nuevo arriba)
   B. Nombres viejos -> nombres nuevos
   C. Qué importa cada aplicación y si todavía existe (autogenerada)
-  D. Aplicaciones (por carpeta, en orden cronológico)
+  D. Aplicaciones (una línea de estado por carpeta, en orden cronológico)
   E. Pendientes e ideas
   F. Plantilla de entrada
 
@@ -172,7 +171,7 @@ B. NOMBRES VIEJOS -> NOMBRES NUEVOS
 C. QUÉ IMPORTA CADA APLICACIÓN Y SI TODAVÍA EXISTE
 ======================================================================================================
 #<<< TABLA_APPS (autogenerada: python herramientas/generar_indice.py -- no editar a mano) >>>
-Generado: 2026-10-28 02:43 (herramientas/generar_indice.py)
+Generado: 2026-11-09 18:50 (herramientas/generar_indice.py)
 Leyenda:  nombre~        = funciona solo porque ese módulo lo importa de otro (la definición está en otro lado);
           FALTA          = el nombre ya no existe en el módulo base vigente: la app falla al importarlo;
           DESCONTINUADO  = el módulo ya no está en la raíz (Main.py, metricas_enfoque.py: ver 'Oudated code').
@@ -238,9 +237,9 @@ Las apps se actualizan solo si Franco lo pide (ver REGLAS_CODIGO.txt).
 
 26.10.13 HDR
   camara_openmv: Framesize, OpenMVCamera, PixFormat
-  impresora_cosmos: TrimakerCOSMOS
-  busqueda_muestra: CampoVisualSinMuestra, DISTANCIA_XY_SIN_SUBIR_MM, FUNCIONES_METRICA~, PicoNoConfirmado, autofocus, bytes_a_imagen~, intensidad_fondo~, laplacian_variance, moverse_a_xy, posicionar_en_muestra
-    FALTA en busqueda_muestra: DISTANCIA_XY_SIN_SUBIR_MM, laplacian_variance, moverse_a_xy
+  impresora_cosmos: DISTANCIA_XY_SIN_SUBIR_MM, TrimakerCOSMOS, moverse_a_xy
+  metricas_imagen: laplacian_variance
+  busqueda_muestra: CampoVisualSinMuestra, FUNCIONES_METRICA~, PicoNoConfirmado, autofocus, bytes_a_imagen~, foco_final_multimetrica, intensidad_fondo~, posicionar_en_muestra
 
 26.10.16 detector de puntos violetas y sus fotos
   camara_openmv: OpenMVCamera
@@ -248,151 +247,77 @@ Las apps se actualizan solo si Franco lo pide (ver REGLAS_CODIGO.txt).
   busqueda_muestra: DISTANCIA_XY_SIN_SUBIR_MM, PicoNoConfirmado, autofocus, bytes_a_imagen~, foco_final_multimetrica, laplacian_variance, moverse_a_xy, posicionar_en_muestra, tenengrad, varianza_intensidad
     FALTA en busqueda_muestra: DISTANCIA_XY_SIN_SUBIR_MM, laplacian_variance, moverse_a_xy, tenengrad, varianza_intensidad
 
-Resumen: de 14 carpetas, 9 importan módulos descontinuados y 4 importan nombres que ya no existen en los módulos base vigentes.
+26.10.29 test de centrado
+  camara_openmv: OpenMVCamera, bytes_a_imagen
+  impresora_cosmos: TrimakerCOSMOS, moverse_a_xy
+  busqueda_muestra: posicionar_en_muestra
+
+Resumen: de 15 carpetas, 9 importan módulos descontinuados y 3 importan nombres que ya no existen en los módulos base vigentes.
 #<<< FIN_TABLA_APPS >>>
 
 
 ======================================================================================================
 D. APLICACIONES (en orden cronológico; la fecha de la carpeta es la de inicio)
 ======================================================================================================
-  Todas las entradas están sin completar desde el chat de origen salvo lo que dicen las notas del
-  proyecto (marcado "notas"). "COMPLETAR" = pedir en el chat donde se trabajó que llene la plantilla
-  de la sección F. Las listas de archivos son las de la carpeta al 2026-10-27.
+  Estado: TERMINADO | EN PRUEBA | NO PROBADO | ABANDONADO | ? (a confirmar con Franco).
+  Qué módulos base importa cada una y si todavía le funciona: sección C.
 
-[26.08.16] En busca del enfoque automático_local
-  Archivos: aplic_autoenfoque_en_z.py, metricas_enfoque.py
-  Base que usa: Main (descontinuado).
-  Objetivo / enfoque / resultado / estado: COMPLETAR.
+[26.08.16] En busca del enfoque automático local -- Estado: ?
+  Primer autoenfoque en Z con una métrica de enfoque (hoy: busqueda_muestra.autofocus()).
 
-[26.08.17] Determinar el tiempo transcurrido en el movimiento de una orden
-  Archivos: aplic_tiempo_de_respuesta_08_27.py, aplic_tiempos_en_el_desplazamiento.py,
-            SOLUCION_prob_temporal.py, prueba_cluade_tiempo_muerto_26.09.11.py (+ notebook)
-  Base que usa: Main y metricas_enfoque (descontinuados).
-  Tema (notas): sincronizar Python con la impresora, esperando a que los motores se detengan antes
-    de disparar la cámara. Hallazgos de la época: M114 devuelve la posición destino apenas se encola
-    la orden, no la real; M400 se observó devolviendo "ok" casi al instante aunque el movimiento
-    tardaba 3-4 s (causa sin resolver en esas notas); había un sleep fijo de 0.5 s en enviar_gcode()
-    que dejaba "ok" sin leer en el buffer. Plan de entonces: trazar la comunicación serie con
-    escuchar() en un hilo; último recurso: calibrar tiempos por distancia.
-  Hoy: impresora_cosmos.esperar_fin_movimiento() manda M400 + M114 y espera la línea de posición.
-  Resultado / estado: COMPLETAR (el nombre SOLUCION_prob_temporal.py sugiere que se resolvió).
+[26.08.17] Determinar el tiempo transcurrido en el movimiento de una orden -- Estado: ?
+  Sincronizar Python con la impresora: esperar a que los motores se detengan antes de disparar la
+  cámara. Hoy: impresora_cosmos.esperar_fin_movimiento() (M400 + M114); ver pendientes 8 y 9.
 
-[26.08.18] Viendo las métricas de las mediciones de hoy
-  Archivos: vista_metricas.py, 09.26 vista_metricas.py
-  Base que usa: metricas_enfoque (descontinuado).
-  Objetivo / enfoque / resultado / estado: COMPLETAR.
+[26.08.18] Viendo las métricas de las mediciones de hoy -- Estado: ?
+  Gráficos de las métricas de enfoque de las mediciones del día.
 
-[26.08.20] Barrido más video
-  Archivos: aplic_barrido_mas_vid.py
-  Base que usa: Main y metricas_enfoque (descontinuados).
-  Objetivo / enfoque / resultado / estado: COMPLETAR.
+[26.08.20] Barrido más video -- Estado: ?
+  Barrido que además graba video.
 
-[26.08.21] Configuración del tomado de fotos
-  Archivos: aplic_config_param_cam.py, aplic_config_param_cam_09_29.py, aplic_config_param_cam_10_16.py
-  Base que usa: camara_openmv, impresora_cosmos, busqueda_muestra (import *) + Main y
-    metricas_enfoque (descontinuados).
-  Objetivo / enfoque / resultado / estado: COMPLETAR. Relacionado: OpenMVCamera.config_de_una().
+[26.08.21] Configuración del tomado de fotos -- Estado: ?
+  Elegir y probar los parámetros de la cámara para sacar fotos (relacionado con config_de_una()).
 
-[26.08.27] Servidor
-  Archivos: codigo_mateo.py
-  Plan (notas): servidor web para mostrar las fotos y videos del barrido y que el operador elija la
-    foto mejor enfocada (eso también informa qué métrica de enfoque conviene confiar); la idea es
-    alojarlo en una Raspberry Pi (detalles a preguntar).
-  Estado: COMPLETAR (no importa módulos base). Ver también Main_server.py en la raíz (sin clasificar).
+[26.08.27] Servidor -- Estado: ?
+  Servidor web para mostrar fotos y videos del barrido y elegir la foto mejor enfocada (plan: Raspberry
+  Pi; la carpeta tiene un codigo_mateo.py).
 
-[26.09.01] Barrido para mosaico
-  Archivos: aplic_barrido_mosaico.py
-  Base que usa: Main y metricas_enfoque (descontinuados).
-  Objetivo / enfoque / resultado / estado: COMPLETAR. Continúa en 26.09.29.
+[26.09.01] Barrido para mosaico -- Estado: ?
+  Primer barrido para armar un mosaico. Continúa en 26.09.29.
 
-[26.09.06] Tres tipos de campos visuales
-  Archivos: escribiendo_la_identificacion_de_campos.py, claude_busqueda_muestra*.py (4 versiones),
-            claude_calibrar_umbral_rojo.py, un CSV de contraste
-  Base que usa: Main y metricas_enfoque (descontinuados).
-  Objetivo (notas): distinguir tres tipos de campo visual para decidir si hay muestra y a qué
-    altura. Tipo 1 = sin muestra / demasiado lejos; Tipo 2 = glóbulos rojos desenfocados; Tipo 3 =
-    cerca del foco. Para la detección gruesa, Tipo 2 y Tipo 3 se tratan como equivalentes.
-  Resultado (notas, sep.): la varianza de intensidad separaba limpiamente "con muestra" de "sin
-    muestra" (criterio de entonces: varianza >= 15.0); la fracción de píxeles rojos se descartó
-    porque las distribuciones se superponían. Se calibró sobre un conjunto de imágenes clasificadas
-    por tipo. Todo el procesamiento pasó a GRAYSCALE (se descartó decodificar RGB565 crudo).
-  Hoy: CRITERIOS_POR_DEFECTO usa varianza 30 y el código dice que los valores "dejaron de valer"
-    (ver pendientes). Estado: COMPLETAR.
+[26.09.06] Tres tipos de campos visuales -- Estado: ?
+  Distinguir si hay muestra y a qué altura: tipo 1 sin muestra o lejos, tipo 2 glóbulos desenfocados,
+  tipo 3 cerca del foco (2 y 3 valen igual para la detección gruesa). Todo el procesamiento pasó a
+  GRAYSCALE. Los umbrales vigentes están en metricas_imagen.CRITERIOS_POR_DEFECTO (pendiente 7).
 
-[26.09.11] Barrido en Z grueso
-  Archivos: aplic_busqueda_muestra_NO_PROBADO.py, aplic_analisis_del_barrido_grueso_claude.py,
-            aplic_guard_de_imag_cerca_del_foco_parasitos_10_13.py, aplic_guardado_de_imagenes.py
-  Base que usa: camara_openmv (import *), impresora_cosmos, busqueda_muestra (import *) + Main y
-    metricas_enfoque (descontinuados).
-  Objetivo (notas): encontrar la altura de la muestra con un barrido grueso en Z y confirmarla
-    contra señales falsas, seguido de un autofoco fino. Hoy esa lógica vive en busqueda_muestra.py
-    (buscar_muestra_en_z, autofocus).
-  Notas de la época: se corrigió un bug por el cual la captura de imágenes del barrido quedaba detrás
-    de una condición que no se cumplía en el caso normal; el barrido arranca desde
-    impresora.posicion_z.
-  Estado: COMPLETAR.
+[26.09.11] Barrido en Z grueso -- Estado: ?
+  Encontrar la altura de la muestra con un barrido grueso en Z, confirmarla y hacer un autoenfoque fino.
+  Hoy: busqueda_muestra.buscar_muestra_en_z() y autofocus(). Un archivo se llama ..._NO_PROBADO.
 
-[26.09.29] Objetivo mosaico
-  Archivos: barrido_espiral_10_02.py, claude_barrido_espiral*.py, claude_generar_mosaico_fiji*.py,
-            claude_reconstruir_mosaico*.py (varias versiones "outdated")
-  Base que usa: camara_openmv, impresora_cosmos, busqueda_muestra (import *) + Main y
-    metricas_enfoque (descontinuados).
-  Objetivo (notas): armar una imagen tipo mosaico de la muestra con fotos en la mayor calidad
-    (4K / WQXGA2) ubicadas por su x-y real conocido.
-  Enfoque (notas): barrido en espiral alrededor del punto inicial, con campos superpuestos y paso
-    igual a la mitad del campo visual en cada eje, con tope configurable de "pasos radiales".
-    Autofoco en CADA posición (el foco se pierde muy rápido al moverse; posicionar_en_muestra con
-    hacer_foco_final=False + autofocus() por posición); se guardan las fotos del autofoco (subcarpeta
-    por posición, con la posición en el nombre) y la foto de alta calidad. La reconstrucción va en un
-    código aparte. Se automatizó el armado con Fiji (Grid/Collection Stitching, macro).
-  Resultado (notas, oct.): primer error de Fiji por las barras "\" de la ruta de Windows dentro del
-    macro (se pasaron a "/"); el plugin escribe un archivo por canal y se agregó una función que los
-    une en un RGB. Mapeo de ejes confirmado (x = filas, y = columnas). Campo visual de entonces en 4K:
-    0.214 x 0.286 mm, impreciso.
-  Estado: COMPLETAR.
+[26.09.29] Objetivo mosaico -- Estado: ?
+  Mosaico en 4K (WQXGA2): barrido en espiral con campos superpuestos, autoenfoque en cada posición y
+  reconstrucción con Fiji (Grid/Collection Stitching). Hay varias versiones "outdated".
 
-[26.10.02] Sacándole fotos al borde
-  Archivos: barrido_fotos_borde.py, aplic_tomando_fotos_del_borde.py
-  Base que usa: camara_openmv, impresora_cosmos, busqueda_muestra (usa moverse_a_xy, que ya no está
-    ahí: ver sección C).
-  Objetivo / enfoque / resultado / estado: COMPLETAR.
+[26.10.02] Sacándole fotos al borde -- Estado: ?
+  Grilla de campos alrededor de un borde de la muestra, con una foto en color enfocada en cada uno
+  (interior / borde / vacío), para clasificarlas a mano y calibrar umbrales.
 
-[26.10.08] Detección del borde + plano de la muestra aproximado
-  Archivos: barrido_plano_enfoque.py, plano_enfoque.py, analisis_campo_visual.py
-  Base que usa: camara_openmv, impresora_cosmos, busqueda_muestra (ver sección C).
-  Objetivo / enfoque / resultado / estado: COMPLETAR.
+[26.10.08] Detección del borde + plano de la muestra aproximado -- Estado: ?
+  Distinguir interior / borde / vacío por cómo se reparten células y fondo (Otsu), y barrido en "T"
+  con autoenfoque para ajustar el plano de enfoque aproximado de la muestra.
 
-[26.10.13] HDR
-  Archivos: HDR.py, foto_final.jpg
-  Base que usa: camara_openmv (OpenMVCamera, PixFormat, Framesize), impresora_cosmos,
-    busqueda_muestra (ver sección C).
-  Objetivo / enfoque / resultado / estado: COMPLETAR.
+[26.10.13] HDR -- Estado: ?
+  Foto HDR: varias exposiciones fusionadas (Mertens, OpenCV).
 
-[26.10.16] Detector de puntos violetas y sus fotos
-  Archivos: deteccion_puntos.py, deteccion_contraste.py, calibrar_detector.py, analizar_colores.py,
-            centrado.py, barrido_puntos.py, correr_barrido_puntos.py, adaptador_hardware.py,
-            diagnostico_barrido.py, simulador_microscopio.py, test_adaptador_hardware.py,
-            test_barrido_simulado.py, test_deteccion_contraste.py, imágenes de colores
-  Base que usa: camara_openmv, impresora_cosmos y busqueda_muestra (ver nombres que faltan en la
-    sección C). Define la clase MicroscopioCosmos (ver pendientes).
-  Objetivo (notas): detectar puntos violetas (glóbulos rojos teñidos, muy separados entre sí) en un
-    preparado fijo, como paso previo a detectar parásitos vivos.
-  Enfoque (notas): por campo visual, si hay un punto violeta se centra la imagen en él y se saca la
-    foto; si no, se cambia de campo; con varios puntos se fotografían todos y dos superpuestos cuentan
-    como uno. "Centrado" = el objeto queda dentro de la celda mínima de la red de posiciones que la
-    impresora puede alcanzar (red cuadrada de 12.5 µm), porque no puede centrar exacto. Para no
-    repetir fotos se guardan las posiciones fotografiadas y se descarta ir a una que coincida
-    (tolerancia 12.5 µm; se probó 25 µm). La detección probablemente cambie y se reutilice; el
-    centrado es una habilidad permanente del microscopio. XY siempre por moverse_a_xy().
-  Resultado (notas, 2026-10-22): escala medida en QVGA con la lente nueva, ~0.388 µm/px (campo de
-    93 x 124 µm). En correr_barrido_puntos.py FOV_X_MM y FOV_Y_MM estaban al revés (0.1243 y 0.09263):
-    los movimientos de centrado salían ~34% largos en x y ~25% cortos en y. Con la escala correcta
-    (0.09263, 0.1243), en el simulador con 36 puntos: 0 fotos duplicadas, 0 sin centrar, residuo
-    máximo 6.1 µm (con la escala al revés: 7 duplicadas, 17 sin centrar, residuo máximo 20.6 µm).
-    Subir la tolerancia de repetidos solo tapaba los duplicados; el centrado lo arregló la escala.
-    Diagnóstico visual del barrido: ConfigBarrido(guardar_imagenes=True, tolerancia_repetidos_um=25.0)
-    escribe <carpeta_salida>/diagnostico/{crudas,marcadas}/ y registro_visitados.json.
-  Estado: COMPLETAR (la última nota que hay es el diagnóstico del 2026-10-22).
+[26.10.16] Detector de puntos violetas y sus fotos -- Estado: EN PRUEBA
+  Detectar puntos violetas (glóbulos rojos teñidos) en un preparado fijo, centrar la imagen en cada uno
+  (dentro de la celda de 12.5 µm de la impresora) y fotografiarlo sin repetir fotos. El barrido se
+  probó en simulador; falta confirmar el centrado en el equipo (ver 26.10.29). Ojo: FOV_X_MM y
+  FOV_Y_MM estaban al revés en correr_barrido_puntos.py y eso desvirtuaba el centrado.
+
+[26.10.29] Test de centrado -- Estado: EN PRUEBA
+  Comprueba en el equipo que mover la impresora para "centrar" un píxel elegido al azar lo deja de verdad
+  en el centro (usa centrado.py de 26.10.16). Según el encabezado de la app, todavía no se corrió.
 
 
 ======================================================================================================
@@ -451,15 +376,8 @@ E. PENDIENTES E IDEAS
 
 
 ======================================================================================================
-F. PLANTILLA DE ENTRADA (para completar desde el chat de cada aplicación)
+F. PLANTILLA DE ENTRADA (sección D)
 ======================================================================================================
-  [YY.MM.DD] <descripción de la carpeta>
-    Archivos: <los que importan>
-    Base que usa: <módulos y nombres; ver sección C>
-    Objetivo: <qué se quería lograr>
-    Enfoque: <qué se propuso para resolverlo, y por qué>
-    Resultado: <a qué se llegó; números medidos; qué funcionó y qué no> (fechas aproximadas)
-    Hallazgos para el futuro: <lo aprendido que conviene no olvidar>
-    Propuestas para la base: <funciones o constantes que podrían incorporarse>
-    Estado: EN PRUEBA | FUNCIONA | NO PROBADA | ABANDONADA
-    Pendiente: <lo que falta>
+  [YY.MM.DD] <descripción de la carpeta> -- Estado: TERMINADO | EN PRUEBA | NO PROBADO | ABANDONADO
+    <una o dos líneas: qué hace y, solo si hace falta, un dato que no convenga olvidar>
+  El detalle (mediciones, gráficos, qué se probó) va en el cuaderno de laboratorio.

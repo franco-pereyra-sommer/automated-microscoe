@@ -8,6 +8,9 @@ CÓMO USAR ESTE ARCHIVO
   - La sección 7 (índice de API) es autogenerada: python herramientas/generar_indice.py
     Regenerarla después de tocar un módulo base. No editarla a mano.
   - Lo marcado "(a confirmar)" viene de notas de chats anteriores y no está verificado en el código.
+  - Estos .txt son un resumen a propósito: no llevan el detalle de los experimentos (mediciones,
+    gráficos, qué se probó), que está en el cuaderno de laboratorio de Franco. De cada aplicación solo
+    se anota una línea y su estado (TERMINADO, EN PRUEBA, NO PROBADO, ABANDONADO) en BITACORA.txt.
 
 
 1. OBJETIVO
@@ -99,7 +102,7 @@ CÓMO USAR ESTE ARCHIVO
 
   Aplicaciones: usan los módulos base y crean funciones propias para evaluar o para usar solo en
   esa aplicación. Pueden estar desactualizadas respecto de la base; se actualizan solo si Franco
-  lo pide. Detalle por carpeta, cambios de la base y compatibilidad: BITACORA.txt.
+  lo pide. Estado de cada una (una línea), cambios de la base y compatibilidad: BITACORA.txt.
 
 
 5. REGLAS EN SEIS LÍNEAS (detalle y justificación en REGLAS_CODIGO.txt)
@@ -123,7 +126,11 @@ CÓMO USAR ESTE ARCHIVO
     - Mosaico: barrido en espiral con campos superpuestos + reconstrucción (Fiji, Grid/Collection
       Stitching).
     - Detector de puntos violetas (glóbulos rojos teñidos, muy separados) en preparado fijo, con
-      centrado dentro de la celda de la grilla de la impresora y barrido sin repetir fotos.
+      centrado dentro de la celda de la grilla de la impresora y barrido sin repetir fotos (probado en
+      simulador; el centrado en el equipo está en prueba, abajo).
+  En prueba
+    - Test de centrado en el equipo (26.10.29): comprobar que la impresora deja en el centro de la
+      imagen el píxel elegido (la cuenta de centrado.py de 26.10.16). Todavía no se corrió.
   Siguiente
     - Parásitos dentro de un preparado fijo; después parásitos vivos (por su movimiento).
     - Servidor web (plan: Raspberry Pi) para mostrar fotos/videos y elegir la foto mejor enfocada,
@@ -137,7 +144,7 @@ CÓMO USAR ESTE ARCHIVO
   características del hardware y los umbrales que hay que leer de los base en vez de redefinir.
 
 #<<< INDICE_API (autogenerado: python herramientas/generar_indice.py -- no editar a mano) >>>
-Generado: 2026-11-09 18:12 (herramientas/generar_indice.py)
+Generado: 2026-11-09 18:50 (herramientas/generar_indice.py)
 
 camara_openmv.py -- Control de la cámara OpenMV H7 PLUS sobre el protocolo serie de texto que entiende "main_openmv.py" (el firmware corrido en la placa).
   Constantes: CLAVES_DICT_PARAMS_CAMARA
