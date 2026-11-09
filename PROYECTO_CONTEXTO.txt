@@ -89,10 +89,13 @@ CÓMO USAR ESTE ARCHIVO
     impresora_cosmos.py  TrimakerCOSMOS: movimiento (desp_lin_000 / desp_lin_cam), home, posición,
                        límites; moverse_a_xy() con la regla de seguridad en XY.
     metricas_imagen.py Procesamiento de imagen sin hardware: métricas de enfoque/presencia
-                       (laplacian_variance, tenengrad, varianza_intensidad, intensidad_fondo) y
-                       criterios de detección.
-    busqueda_muestra.py  Combina cámara + impresora: autofocus, verificar_presencia_muestra,
-                       buscar_muestra_en_z, foco_final_multimetrica, posicionar_en_muestra.
+                       (laplacian_variance, tenengrad, varianza_intensidad, intensidad_fondo) y la
+                       regla de detección por aumento relativo a una línea de base
+                       (detectar_aumento).
+    busqueda_muestra.py  Combina cámara + impresora: autofocus, buscar_foco_en_xy (lleva la platina a
+                       (x, y), baja en Z y la deja en el foco confirmado; nombre provisional),
+                       foco_final_multimetrica. Sueltas: verificar_presencia_muestra,
+                       CampoVisualSinMuestra.
                        (Franco: el nombre no representa bien lo que contiene.)
 
   Otras carpetas y archivos de la raíz
@@ -125,7 +128,8 @@ CÓMO USAR ESTE ARCHIVO
 
 6. HOJA DE RUTA (según lo dicho por Franco; a confirmar)
   Hecho / en uso
-    - Búsqueda de muestra en Z (barrido grueso + confirmación) y autofoco global y local.
+    - Autofoco global y local. La búsqueda de la muestra en Z (antes posicionar_en_muestra()) la
+      reemplazó buscar_foco_en_xy() el 2026-11-09: todavía sin probar en el equipo.
     - Mosaico: barrido en espiral con campos superpuestos + reconstrucción (Fiji, Grid/Collection
       Stitching).
   En prueba
@@ -137,7 +141,10 @@ CÓMO USAR ESTE ARCHIVO
       fotografía todos los puntos y si los centra bien.
     - Borde y plano de la muestra (26.10.08): barrido en "T" y plano de enfoque aproximado.
   Siguiente
-    - Mejorar posicionar_en_muestra() (hoy autofocus() da problemas), usando 26.09.11 como base.
+    - Probar buscar_foco_en_xy() (hoy autofocus() da problemas). Antes, una medición larga parecida a
+      26.09.11: dos muestras, varios campos (x, y), parámetros de cámara automáticos y fijos, con el
+      sistema óptico fijo; sirve para elegir los aumentos por métrica y los parámetros de cámara que
+      más ayudan al autofocus (BITACORA.txt, pendientes 16 y 17).
     - Parásitos dentro de un preparado fijo; después parásitos vivos (por su movimiento).
     - Servidor web (ya funciona; se lo está llevando a una Raspberry Pi) para que el operador vea
       fotos/videos en el celular y elija la foto mejor enfocada, lo que también informa qué métrica de
@@ -151,7 +158,7 @@ CÓMO USAR ESTE ARCHIVO
   características del hardware y los umbrales que hay que leer de los base en vez de redefinir.
 
 #<<< INDICE_API (autogenerado: python herramientas/generar_indice.py -- no editar a mano) >>>
-Generado: 2026-11-09 18:50 (herramientas/generar_indice.py)
+Generado: 2026-11-09 23:14 (herramientas/generar_indice.py)
 
 camara_openmv.py -- Control de la cámara OpenMV H7 PLUS sobre el protocolo serie de texto que entiende "main_openmv.py" (el firmware corrido en la placa).
   Constantes: CLAVES_DICT_PARAMS_CAMARA
@@ -204,17 +211,19 @@ metricas_imagen.py -- Métricas de imagen del proyecto: funciones que reciben un
   tenengrad(imagen)
   varianza_intensidad(imagen)
   evaluar_criterios(imagen, criterios) -- Devuelve (valores, disparados)
+  validar_aumentos(aumentos, nombre_parametro) -- Revisa un diccionario {métrica: aumento} sin medir nada.
+  linea_de_base(valores_por_foto, nombres, pasos_linea_base) -- Promedio de cada métrica en las primeras 'pasos_linea_base' fotos: {nombre: promedio}.
+  detectar_aumento(valores_por_foto, aumentos, pasos_linea_base, fotos_seguidas, desde) -- Dice si, en una lista de mediciones ya hechas, alguna métrica superó su línea de base por más de su aumento.
 
 busqueda_muestra.py
-  class MuestraNoEncontrada()
-  class CampoVisualSinMuestra() -- La verificación temprana (intensidad de fondo) indica que este (x, y) no tiene glóbulos rojos en ninguna al...
+  class MuestraNoEncontrada() -- buscar_foco_en_xy() bajó hasta z_min_seguridad sin confirmar el foco.
+  class CampoVisualSinMuestra() -- SUELTA desde el 2026-11-09: ya no la lanza ninguna función de la base (la lanzaba la verificación de presen...
   class RiesgoDeColision()
   class PicoNoConfirmado() -- autofocus() no pudo confirmar el máximo que encontró: ni el barrido inicial ni la extensión (dentro de 'pas...
   autofocus(camara, impresora, metrica, pasos_arriba, pasos_abajo, paso_z, ... (+8)) -- Barre en Z alrededor de la posición actual y devuelve la altura donde 'metrica' es máxima.
-  verificar_presencia_muestra(camara, impresora, z_arriba_seguro, z_min_seguridad, alturas_a_revisar, umbral_intensidad_fondo, ... (+3)) -- Chequeo rápido ANTES del barrido grueso: revisa unas pocas alturas de Z (con pixformat RGB565, que es como...
-  buscar_muestra_en_z(camara, impresora, z_arriba_seguro, z_min_seguridad, dict_params_global, paso_grueso, ... (+10)) -- Devuelve un diccionario
-  foco_final_multimetrica(camara, impresora, dict_params_grayscale, dict_params_color, z_min_seguridad, z_max_seguro, ... (+9)) -- Pensada para usarse justo después de que buscar_muestra_en_z() confirma una muestra (es decir, arrancando y...
-  posicionar_en_muestra(camara, impresora, x, y, z_arriba_seguro, z_min_seguridad, ... (+21)) -- Automatiza el flujo completo para una posición (x, y)
+  verificar_presencia_muestra(camara, impresora, z_arriba_seguro, z_min_seguridad, alturas_a_revisar, umbral_intensidad_fondo, ... (+3)) -- SUELTA desde el 2026-11-09 (no la llama ninguna función de la base; se decide en la limpieza).
+  buscar_foco_en_xy(camara, impresora, x, y, z_arriba_seguro, z_min_seguridad, ... (+14)) -- Lleva la platina a (x, y), baja en Z hasta que las métricas de enfoque suben respecto de una línea de base...
+  foco_final_multimetrica(camara, impresora, dict_params_grayscale, dict_params_color, z_min_seguridad, z_max_seguro, ... (+9)) -- Pensada para usarse justo después de que buscar_foco_en_xy() confirma una muestra (es decir, arrancando ya...
 #<<< FIN_INDICE_API >>>
 
 

@@ -23,6 +23,48 @@ CÓMO USAR ESTE ARCHIVO
 A. REGISTRO DE CAMBIOS DE LOS MÓDULOS BASE
 ======================================================================================================
 
+2026-11-09  (Claude, a pedido de Franco: mejorar posicionar_en_muestra())
+  - busqueda_muestra.py: UNA función, buscar_foco_en_xy(), reemplaza a buscar_muestra_en_z() y a
+    posicionar_en_muestra(). Sin alias: los nombres viejos ya no existen (llamarlos da AttributeError;
+    importarlos, ImportError). El nombre es PROVISIONAL: Franco decide el final (renombrar es un cambio
+    por script). Lleva la platina a (x, y) con moverse_a_xy() (z_seguro_xy=40), baja desde
+    z_arriba_seguro y la deja en el máximo confirmado. Ya NO verifica la presencia, ni hace foco final
+    ni guarda fotos de foco final: eso se pide desde afuera (autofocus(), foco_final_multimetrica()).
+  - Detección nueva (los umbrales absolutos de CRITERIOS_POR_DEFECTO dejaron de servir: a veces la
+    primera foto ya los superaba): línea de base = promedio de cada métrica en las primeras
+    pasos_linea_base fotos (5); una métrica detecta cuando supera su línea de base por más de su aumento
+    en fotos_seguidas_para_detectar fotos seguidas (2); la confirma autofocus() y el pico tiene que
+    superar el umbral de detección por margen_confirmacion (0.15). Señal falsa: salta un paso_grueso por
+    debajo del disparo y vuelve a contar con la misma línea de base. aumento_deteccion = {métrica:
+    fracción} es obligatorio y NO tiene valores por defecto: se miden (pendiente 16).
+  - Parámetros: nuevos aumento_deteccion, z_seguro_xy (40), pasos_linea_base, fotos_seguidas_para_detectar,
+    vecinos_para_confirmar (3); pasos_confirmacion=6 (antes 10 en buscar_muestra_en_z y 6 en
+    posicionar_en_muestra); pasos_extension_maxima (3). Desaparecen: dict_params_local, criterios_deteccion,
+    verificar_presencia, alturas_verificacion, umbral_intensidad_fondo, hacer_foco_final,
+    metrica_foco_final, pasos_arriba_foco_final, pasos_abajo_foco_final, guardar_fotos_foco_final,
+    carpeta_fotos_foco_final, foco_final_multimetrica_activado, dict_params_color_foco_final.
+  - Devuelve además x, y, linea_base, umbrales_deteccion, candidatos (una entrada por detección, con su
+    resultado) e historial_barrido_grueso; con MuestraNoEncontrada, error.resultado_parcial lleva lo mismo
+    sin lo confirmado. Revisa todo ANTES de mover y, si la platina no llegó a (x, y), levanta
+    RuntimeError sin bajar.
+  - metricas_imagen.py: NUEVAS validar_aumentos(), linea_de_base(), detectar_aumento(): la regla de
+    detección sobre números ya medidos (sirve para probarla a mano con mediciones guardadas).
+  - SUELTAS (nada de la base las llama; se decide en la limpieza; Franco: no sacar nada de la base):
+    verificar_presencia_muestra(), CampoVisualSinMuestra (la importan 26.10.08 y 26.10.13),
+    CRITERIOS_POR_DEFECTO y evaluar_criterios() de metricas_imagen.py. busqueda_muestra.py dejó de
+    importar estas dos últimas.
+  - tests/: test_busqueda.py (buscar_foco_en_xy: detección, señal falsa, confirmación, seguridad en Z y
+    en XY, parámetros inválidos rechazados antes de mover) y test_metricas.py (detección relativa).
+  - Quedan rotas, sin tocar (llaman a posicionar_en_muestra() o buscar_muestra_en_z(); la tabla C solo
+    ve lo que se importa con `from`): 26.08.21 aplic_config_param_cam_10_16.py; 26.09.11
+    aplic_busqueda_muestra_NO_PROBADO.py y aplic_guard_de_imag_cerca_del_foco_parasitos_10_13.py;
+    26.09.29 barrido_espiral_10_02.py, claude_barrido_espiral.py y claude_barrido_espiral_outdated_1.py;
+    26.10.02 aplic_tomando_fotos_del_borde.py y barrido_fotos_borde.py; 26.10.08 barrido_plano_enfoque.py;
+    26.10.13 HDR.py; 26.10.16 adaptador_hardware.py, correr_barrido_puntos.py y
+    test_adaptador_hardware.py; 26.10.29 correr_prueba_centrado.py.
+  - REGLAS_CODIGO.txt: el ejemplo de la regla 5 (autofocus, posicionar_en_muestra) pasó a nombrar
+    buscar_foco_en_xy.
+
 2026-11-09  (Claude, a pedido de Franco: los parámetros de la cámara se pasan siempre explícitos)
   - camara_openmv.py: OpenMVCamera.config_de_una() ahora recibe UN diccionario con todos los parámetros
     de la cámara:  config_de_una(dict_params, calidad=100, skip=2). Claves pixformat, resolucion,
@@ -142,6 +184,7 @@ B. NOMBRES VIEJOS -> NOMBRES NUEVOS
                         pixformat_color_foco_final=, resolucion_color_foco_final=)
                                                      posicionar_en_muestra(dict_params_global=, dict_params_local=,
                                                                            dict_params_color_foco_final=)
+  (buscar_muestra_en_z y posicionar_en_muestra dejaron de existir el mismo día: ver abajo.)
   Funciones y clases:
   TrimakerCOSMOS.desp_lin_abs()                      TrimakerCOSMOS.desp_lin_000()
   TrimakerCOSMOS.desp_lin_rel()                      TrimakerCOSMOS.desp_lin_cam()
@@ -156,6 +199,8 @@ B. NOMBRES VIEJOS -> NOMBRES NUEVOS
   busqueda_muestra.FUNCIONES_METRICA                 metricas_imagen.FUNCIONES_METRICA
   busqueda_muestra.CRITERIOS_POR_DEFECTO             metricas_imagen.CRITERIOS_POR_DEFECTO
   busqueda_muestra._evaluar_criterios                metricas_imagen.evaluar_criterios
+  busqueda_muestra.buscar_muestra_en_z               busqueda_muestra.buscar_foco_en_xy  (2026-11-09; nombre provisional)
+  busqueda_muestra.posicionar_en_muestra             busqueda_muestra.buscar_foco_en_xy  (ya no verifica presencia ni hace foco final)
   Main.OpenMVCamera  (Main.py descontinuado)         camara_openmv.OpenMVCamera
   Main.TrimakerCOSMOS (Main.py descontinuado)        impresora_cosmos.TrimakerCOSMOS
   metricas_enfoque.autofocus                         busqueda_muestra.autofocus
@@ -175,7 +220,7 @@ B. NOMBRES VIEJOS -> NOMBRES NUEVOS
 C. QUÉ IMPORTA CADA APLICACIÓN Y SI TODAVÍA EXISTE
 ======================================================================================================
 #<<< TABLA_APPS (autogenerada: python herramientas/generar_indice.py -- no editar a mano) >>>
-Generado: 2026-11-09 18:50 (herramientas/generar_indice.py)
+Generado: 2026-11-09 23:14 (herramientas/generar_indice.py)
 Leyenda:  nombre~        = funciona solo porque ese módulo lo importa de otro (la definición está en otro lado);
           FALTA          = el nombre ya no existe en el módulo base vigente: la app falla al importarlo;
           DESCONTINUADO  = el módulo ya no está en la raíz (Main.py, metricas_enfoque.py: ver 'Oudated code').
@@ -237,26 +282,28 @@ Las apps se actualizan solo si Franco lo pide (ver REGLAS_CODIGO.txt).
   camara_openmv: OpenMVCamera
   impresora_cosmos: TrimakerCOSMOS
   busqueda_muestra: CampoVisualSinMuestra, DISTANCIA_XY_SIN_SUBIR_MM, FUNCIONES_METRICA~, PicoNoConfirmado, _a_escala_de_grises, autofocus, bytes_a_imagen~, intensidad_fondo~, laplacian_variance, moverse_a_xy, posicionar_en_muestra
-    FALTA en busqueda_muestra: DISTANCIA_XY_SIN_SUBIR_MM, _a_escala_de_grises, laplacian_variance, moverse_a_xy
+    FALTA en busqueda_muestra: DISTANCIA_XY_SIN_SUBIR_MM, _a_escala_de_grises, laplacian_variance, moverse_a_xy, posicionar_en_muestra
 
 26.10.13 HDR
   camara_openmv: Framesize, OpenMVCamera, PixFormat
   impresora_cosmos: DISTANCIA_XY_SIN_SUBIR_MM, TrimakerCOSMOS, moverse_a_xy
   metricas_imagen: laplacian_variance
   busqueda_muestra: CampoVisualSinMuestra, FUNCIONES_METRICA~, PicoNoConfirmado, autofocus, bytes_a_imagen~, foco_final_multimetrica, intensidad_fondo~, posicionar_en_muestra
+    FALTA en busqueda_muestra: posicionar_en_muestra
 
 26.10.16 detector de puntos violetas y sus fotos
   camara_openmv: OpenMVCamera
   impresora_cosmos: TrimakerCOSMOS
   busqueda_muestra: DISTANCIA_XY_SIN_SUBIR_MM, PicoNoConfirmado, autofocus, bytes_a_imagen~, foco_final_multimetrica, laplacian_variance, moverse_a_xy, posicionar_en_muestra, tenengrad, varianza_intensidad
-    FALTA en busqueda_muestra: DISTANCIA_XY_SIN_SUBIR_MM, laplacian_variance, moverse_a_xy, tenengrad, varianza_intensidad
+    FALTA en busqueda_muestra: DISTANCIA_XY_SIN_SUBIR_MM, laplacian_variance, moverse_a_xy, posicionar_en_muestra, tenengrad, varianza_intensidad
 
 26.10.29 test de centrado
   camara_openmv: OpenMVCamera, bytes_a_imagen
   impresora_cosmos: TrimakerCOSMOS, moverse_a_xy
   busqueda_muestra: posicionar_en_muestra
+    FALTA en busqueda_muestra: posicionar_en_muestra
 
-Resumen: de 15 carpetas, 9 importan módulos descontinuados y 3 importan nombres que ya no existen en los módulos base vigentes.
+Resumen: de 15 carpetas, 9 importan módulos descontinuados y 5 importan nombres que ya no existen en los módulos base vigentes.
 #<<< FIN_TABLA_APPS >>>
 
 
@@ -301,8 +348,8 @@ D. APLICACIONES (en orden cronológico; la fecha de la carpeta es la de inicio)
 
 [26.09.11] Barrido en Z grueso -- PROBADO
   Guardar imágenes de un barrido grueso en Z y analizar sus métricas. El archivo ..._NO_PROBADO es uno
-  que ese día no se corrió; posicionar_en_muestra() funciona "bien" hoy. Próximo paso: usar esta
-  aplicación como base para mejorar posicionar_en_muestra() (pendiente 16).
+  que ese día no se corrió. Esa parte hoy vive en buscar_foco_en_xy() (2026-11-09, antes
+  posicionar_en_muestra()); esta aplicación es la base de la medición de los aumentos (pendiente 16).
 
 [26.09.29] Objetivo mosaico -- PROBADO
   Mosaico en 4K (WQXGA2): barrido en espiral con campos superpuestos, autoenfoque en cada posición y
@@ -341,8 +388,8 @@ E. PENDIENTES E IDEAS
 ======================================================================================================
   Orden
    1. busqueda_muestra.py: el nombre no representa lo que contiene (autofocus, verificación de
-      presencia, búsqueda en Z, foco final multimétrica, posicionar_en_muestra). Decidir nombre y si
-      se parte.
+      presencia (suelta), búsqueda del foco con buscar_foco_en_xy(), foco final multimétrica). Decidir
+      el nombre y si se parte.
    2. Escala (µm/px) y campo visual por resolución: viven en una aplicación (FOV_X_MM, FOV_Y_MM) y en
       notas. Pasarlos a camara_openmv.py (regla de centralización) y volver a medir en 4K con la lente
       nueva.
@@ -352,9 +399,10 @@ E. PENDIENTES E IDEAS
    5. Archivos sueltos en la raíz (output.png, la charla sobre pixi, etc.): decidir si se ordenan.
    6. .gitignore solo ignora .pixi: los __pycache__ aparecen como archivos sin seguimiento.
   Calibración
-   7. CRITERIOS_POR_DEFECTO (laplacian 12, tenengrad 200, varianza 30): el comentario del código dice
-      que dejaron de valer; los valores anteriores quedaron comentados (6.35 / 70 / 10.35).
-      Recalibrar con imágenes clasificadas.
+   7. CRITERIOS_POR_DEFECTO (laplacian 12, tenengrad 200, varianza 30): dejaron de valer y desde el
+      2026-11-09 la búsqueda del foco no los usa (usa aumentos relativos a una línea de base: pendiente
+      16). Quedan sueltos hasta la limpieza; los valores anteriores quedaron comentados (6.35 / 70 /
+      10.35).
   Técnicos
    8. Sincronización con la impresora: confirmar en el equipo que M400 + M114 espera de verdad (las
       notas de oct. lo daban sin resolver). Franco (2026-11-09): en 26.08.17 la espera quedó satisfactoria;
@@ -376,22 +424,34 @@ E. PENDIENTES E IDEAS
       dejar pasar un instante y vaciarlo después de G28.
   10. Docstrings: los métodos de OpenMVCamera casi no tienen; el índice de API los muestra sin
       descripción.
-  11. tests/: buscar_muestra_en_z, foco_final_multimetrica y posicionar_en_muestra tienen desde el
-      2026-11-09 pruebas básicas con la cámara falsa (diccionarios de cámara, rechazo antes de mover,
-      fotos vecinas y gráfico, límites). Falta cubrir más casos: señal falsa y extensión del barrido en
-      buscar_muestra_en_z, CampoVisualSinMuestra, y el modo de una métrica con guardado de fotos.
+  11. tests/: buscar_foco_en_xy y foco_final_multimetrica tienen pruebas con la cámara falsa
+      (diccionarios de cámara, rechazo antes de mover, fotos vecinas y gráfico, límites, señal falsa).
+      Falta cubrir: CampoVisualSinMuestra, verificar_presencia_muestra y el modo de una métrica con
+      guardado de fotos de foco_final_multimetrica.
   12. Servidor web (26.08.27): funciona; se lo está llevando a una Raspberry Pi para que el operador
       vea las fotos y videos en el celular. Ese código no está en el repo.
   13. Parásitos: preparado fijo primero, después vivos por movimiento (hoja de ruta).
   14. Actualizar las aplicaciones que importan nombres que ya no existen (sección C) y las que
-      quedaron rotas por el cambio de parámetros de cámara del 2026-11-09 (lista en el registro de
-      cambios, sección A; la tabla C no las detecta), solo cuando Franco lo pida.
+      quedaron rotas por los cambios del 2026-11-09 (parámetros de cámara y buscar_foco_en_xy: listas en
+      el registro de cambios, sección A; la tabla C no las detecta), solo cuando Franco lo pida.
   15. Parámetros de cámara explícitos en lo que todavía no los pide: config_autofoco_local() deja
       exposición y ganancia en automático si no se las pasan (y no tiene balance de blancos), y
       verificar_presencia_muestra() no toca exposición, ganancia ni balance de blancos. Decidir si
       pasan también a diccionarios (2026-11-09: no se tocaron, no estaba pedido).
-  16. autofocus() está dando problemas (Franco, 2026-11-09). Próximo paso: usar 26.09.11 como base para
-      mejorar posicionar_en_muestra().
+  16. autofocus() está dando problemas (Franco, 2026-11-09). Hecho ese día: buscar_foco_en_xy() (ver A),
+      todavía SIN probar en el equipo. Falta una medición larga, parecida a 26.09.11: dos muestras,
+      varios campos (x, y) y parámetros de cámara (una pasada con los automáticos, otras con fijos); lo
+      único fijo es el sistema óptico. Tiene que contestar qué aumentos (los "x") conviene usar por
+      métrica y qué parámetros de cámara ayudan más al autofocus; ahí se ve también presencia versus
+      foco / varianza. Abiertos: el nombre final de buscar_foco_en_xy() (el comentario de
+      impresora_cosmos.py sobre viajes largos todavía nombra a posicionar_en_muestra()) y si Claude
+      escribe la aplicación de medición.
+  17. buscar_foco_en_xy(), a vigilar en la medición: (a) la línea de base se contamina si
+      z_arriba_seguro no está lejos del foco (5 pasos de 5 um son 25 um de unos 400 um de recorrido);
+      (b) no hay piso de ruido: se podría sumar k veces el desvío de la línea de base; (c) varianza
+      mide presencia más que foco, y sin verificar_presencia un campo vacío se barre entero (unos 80
+      pasos) y termina en MuestraNoEncontrada; (d) con un aumento chico hay muchas señales falsas (en
+      el simulador, 14 candidatos descartados con 0.5 y 5 con 5.0; la óptica real puede ser distinta).
 
 
 ======================================================================================================

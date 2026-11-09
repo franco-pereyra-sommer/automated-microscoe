@@ -4,17 +4,21 @@
 Pruebas de busqueda_muestra.py (el módulo que combina cámara + impresora)
 con la impresora real sobre serie simulado y una cámara falsa.
 
-Desde el 2026-11-09 también hay pruebas de buscar_muestra_en_z,
-foco_final_multimetrica y posicionar_en_muestra con la cámara falsa: se
-centran en qué parámetros de cámara (los diccionarios) recibe cada etapa, en que
-un diccionario malo se rechaza ANTES de mover la platina, y en las fotos y el
+Desde el 2026-11-09 también hay pruebas de foco_final_multimetrica y de
+buscar_foco_en_xy (la función que unió a buscar_muestra_en_z y posicionar_en_muestra)
+con la cámara falsa: qué parámetros de cámara (los diccionarios) recibe cada etapa,
+que un parámetro malo se rechaza ANTES de mover la platina, cómo va a (x, y)
+(moverse_a_xy con z_seguro_xy = 40), la línea de base, la detección con fotos
+seguidas, la confirmación y los límites de seguridad en Z; y las fotos y el
 gráfico que guarda foco_final_multimetrica. NO prueban que los números de las
-métricas sean los del equipo (la imagen es sintética).
+métricas sean los del equipo (la imagen es sintética, y su desenfoque dura mucho
+más que el real).
 
 Creado el 2026-10-27.
 """
 
 import contextlib
+import inspect
 import io
 import re
 import tempfile
@@ -305,121 +309,333 @@ def test_foco_final_multimetrica_ya_no_acepta_los_parametros_sueltos_de_antes():
     assert impresora.ser.escrituras == []
 
 
+AUMENTO = {"varianza": 5.0}    # sobre el simulador: detecta cerca del foco (el real se mide)
+TODOS_LOS_AUMENTOS = {"laplacian": 0.5, "tenengrad": 0.5, "varianza": 0.5}
+PASO_GRUESO = 0.005
+
+
 def _buscar(camara, impresora, **kwargs):
+    kwargs.setdefault("x", X)
+    kwargs.setdefault("y", Y)
+    kwargs.setdefault("z_arriba_seguro", Z_ARRIBA_SEGURO)
+    kwargs.setdefault("z_min_seguridad", Z_MIN_SEGURIDAD)
     kwargs.setdefault("dict_params_global", DICT_GRAYSCALE)
-    return _en_silencio(busqueda_muestra.buscar_muestra_en_z, camara, impresora,
-                        z_arriba_seguro=Z_ARRIBA_SEGURO, z_min_seguridad=Z_MIN_SEGURIDAD, **kwargs)
+    kwargs.setdefault("aumento_deteccion", AUMENTO)
+    return _en_silencio(busqueda_muestra.buscar_foco_en_xy, camara, impresora, **kwargs)
 
 
-def test_buscar_muestra_en_z_configura_la_camara_con_dict_params_global():
+def _espiar_movimientos(impresora):
+    """Lista de (nombre_del_metodo, x, y, z) con la posición DESPUÉS de cada desp_lin_000 / desp_lin_cam."""
+
+    movimientos = []
+
+    for nombre in ("desp_lin_000", "desp_lin_cam"):
+        original = getattr(impresora, nombre)
+
+        def espiar(*args, _original=original, _nombre=nombre, **kwargs):
+            resultado = _original(*args, **kwargs)
+            movimientos.append((_nombre, float(impresora.posicion_x), float(impresora.posicion_y),
+                                float(impresora.posicion_z)))
+            return resultado
+
+        setattr(impresora, nombre, espiar)
+
+    return movimientos
+
+
+def test_buscar_foco_en_xy_encuentra_el_foco_y_configura_la_camara_una_sola_vez():
     impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
 
     resultado = _buscar(camara, impresora)
 
     assert camara.llamadas_config_de_una == [DICT_GRAYSCALE]
     assert abs(resultado["z_confirmado"] - Z_FOCO) <= PASO_Z + 1e-9
+    assert resultado["metrica_confirmada"] == "varianza"
+    assert (resultado["x"], resultado["y"]) == (X, Y)
+    # la platina queda en el máximo confirmado (autofocus() la deja ahí): el foco final se hace desde afuera
+    assert abs(float(impresora.posicion_z) - resultado["z_confirmado"]) < 1e-9
 
 
-def test_la_verificacion_de_presencia_revisa_en_rgb565_con_la_resolucion_del_diccionario():
+def test_buscar_foco_en_xy_va_a_x_y_por_moverse_a_xy_y_viaja_a_z_seguro_40():
+    assert inspect.signature(busqueda_muestra.buscar_foco_en_xy).parameters["z_seguro_xy"].default == 40.0
+
+    # viaje largo: sube a 40 mm, se mueve en XY ARRIBA, y recién después baja a z_arriba_seguro
     impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
-    capturas = []
-    capturar_original = camara.capturar
-    camara.capturar = lambda: (capturas.append((camara.pixformat, camara.framesize)), capturar_original())[1]
+    impresora.desp_lin_000(50.0, 50.0, Z_ARRIBA_SEGURO)
+    movimientos = _espiar_movimientos(impresora)
 
-    _buscar(camara, impresora, dict_params_global=DICT_LOCAL,        # VGA en el diccionario
-            verificar_presencia=True, umbral_intensidad_fondo=100)
+    _buscar(camara, impresora)
 
-    assert capturas[0] == ("RGB565", "VGA"), capturas[:2]            # verificación: RGB565 a la resolución del diccionario
-    assert capturas[-1] == ("GRAYSCALE", "VGA"), capturas[-2:]       # barrido y confirmación: el diccionario completo
-    assert camara.llamadas_config_de_una == [DICT_LOCAL]
+    en_xy = [m for m in movimientos if m[0] == "desp_lin_000"]
+    assert len(en_xy) == 1 and (en_xy[0][1], en_xy[0][2]) == (X, Y) and en_xy[0][3] == 40.0, en_xy
+    assert movimientos[0][0] == "desp_lin_cam" and movimientos[0][3] == 40.0, movimientos[:2]
+    assert movimientos[2][0] == "desp_lin_cam" and abs(movimientos[2][3] - Z_ARRIBA_SEGURO) < 1e-9, movimientos[:4]
 
 
-def test_buscar_muestra_en_z_rechaza_un_diccionario_malo_antes_de_mover():
-    for malo in ({"pixformat": "GRAYSCALE", "resolucion": "QVGA"}, "QVGA", None):
+def test_buscar_foco_en_xy_viaje_corto_mantiene_el_z_y_z_seguro_xy_se_puede_cambiar():
+    # un salto de 0.1 mm (<= DISTANCIA_XY_SIN_SUBIR_MM) no sube: se mueve en XY con el Z que tenía
+    impresora, camara = _preparar(z_inicial=27.7)
+    movimientos = _espiar_movimientos(impresora)
+
+    _buscar(camara, impresora, x=X + 0.1)
+
+    en_xy = [m for m in movimientos if m[0] == "desp_lin_000"]
+    assert len(en_xy) == 1 and abs(en_xy[0][3] - 27.7) < 1e-9, en_xy
+    assert max(m[3] for m in movimientos) <= Z_ARRIBA_SEGURO + 1e-9      # nunca subió a 40
+
+    # con otro z_seguro_xy, el viaje largo sube hasta ahí
+    impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
+    impresora.desp_lin_000(50.0, 50.0, Z_ARRIBA_SEGURO)
+    movimientos = _espiar_movimientos(impresora)
+
+    _buscar(camara, impresora, z_seguro_xy=30.0)
+
+    assert [m for m in movimientos if m[0] == "desp_lin_000"][0][3] == 30.0
+
+
+def test_buscar_foco_en_xy_si_la_platina_no_llega_a_x_y_no_baja():
+    impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
+    movimientos = _espiar_movimientos(impresora)
+
+    _tiene_que_fallar(lambda: _buscar(camara, impresora, x=500.0), RuntimeError, "no llegó")
+
+    assert min(m[3] for m in movimientos) >= Z_ARRIBA_SEGURO - 1e-9, movimientos     # a lo sumo subió
+    assert camara.llamadas_config_de_una == [] and camara.capturas == 0
+
+
+def test_buscar_foco_en_xy_la_linea_de_base_son_las_primeras_fotos_y_el_umbral_sale_de_ella():
+    impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
+
+    resultado = _buscar(camara, impresora, aumento_deteccion=TODOS_LOS_AUMENTOS, pasos_linea_base=4)
+
+    historial = resultado["historial_barrido_grueso"]
+    fases = [h["fase"] for h in historial]
+    assert fases[:4] == ["linea_base"] * 4 and set(fases[4:]) == {"barrido"}, fases[:8]
+
+    # empieza en z_arriba_seguro y baja de a paso_grueso
+    assert [round(h["z"], 4) for h in historial[:4]] == [27.9, 27.895, 27.89, 27.885]
+
+    for nombre in busqueda_muestra.FUNCIONES_METRICA:
+        promedio = sum(h[nombre] for h in historial[:4]) / 4
+        assert abs(resultado["linea_base"][nombre] - promedio) < 1e-9, nombre
+
+    for nombre, aumento in TODOS_LOS_AUMENTOS.items():
+        assert abs(resultado["umbrales_deteccion"][nombre] - resultado["linea_base"][nombre] * (1 + aumento)) < 1e-9
+
+    ultimo = resultado["candidatos"][-1]
+    assert ultimo["resultado"] == "confirmado" and ultimo["metrica"] == resultado["metrica_confirmada"]
+    assert abs(ultimo["umbral_confirmacion"] - ultimo["umbral_deteccion"] * 1.15) < 1e-9     # margen_confirmacion = 0.15
+
+
+def test_buscar_foco_en_xy_usa_la_misma_regla_que_detectar_aumento_sobre_las_mediciones_guardadas():
+    impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
+
+    resultado = _buscar(camara, impresora)
+
+    historial = resultado["historial_barrido_grueso"]
+    primero = metricas_imagen.detectar_aumento(historial, AUMENTO, pasos_linea_base=5, fotos_seguidas=2)
+
+    assert primero is not None and primero["metrica"] == "varianza"
+    assert abs(historial[primero["indice"]]["z"] - resultado["candidatos"][0]["z_disparo"]) < 1e-9
+
+
+def test_buscar_foco_en_xy_pide_fotos_seguidas_antes_de_lanzar_autofocus():
+    z_disparo = {}
+
+    for seguidas in (1, 2, 3):
+        impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
+        resultado = _buscar(camara, impresora, fotos_seguidas_para_detectar=seguidas)
+        z_disparo[seguidas] = resultado["candidatos"][0]["z_disparo"]
+
+    # cada foto seguida que se pide agrega un paso_grueso más abajo
+    assert abs((z_disparo[1] - z_disparo[2]) - PASO_GRUESO) < 1e-9, z_disparo
+    assert abs((z_disparo[2] - z_disparo[3]) - PASO_GRUESO) < 1e-9, z_disparo
+
+
+def test_buscar_foco_en_xy_descarta_las_senales_falsas_y_cuenta_las_seguidas_desde_cero():
+    for seguidas in (1, 3):
         impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
 
-        _tiene_que_fallar(lambda: _buscar(camara, impresora, dict_params_global=malo), (ValueError, TypeError))
+        resultado = _buscar(camara, impresora, fotos_seguidas_para_detectar=seguidas)
+
+        candidatos = resultado["candidatos"]
+        assert len(candidatos) >= 2, "con este aumento tendría que haber señales falsas antes del foco"
+        assert [c["resultado"] for c in candidatos[:-1]] == ["pico_no_confirmado"] * (len(candidatos) - 1)
+        assert candidatos[-1]["resultado"] == "confirmado"
+
+        # después de descartar, vuelve a pedir TODAS las seguidas: no reutiliza las fotos de antes
+        for anterior, siguiente in zip(candidatos, candidatos[1:]):
+            assert anterior["z_disparo"] - siguiente["z_disparo"] >= seguidas * PASO_GRUESO - 1e-9, (seguidas, candidatos)
+
+
+def test_buscar_foco_en_xy_expone_los_parametros_de_la_confirmacion():
+    original = busqueda_muestra.autofocus
+    llamadas = []
+
+    def espiar(*args, **kwargs):
+        llamadas.append(kwargs)
+        return original(*args, **kwargs)
+
+    busqueda_muestra.autofocus = espiar
+
+    try:
+        # por defecto: pasos_confirmacion = 6, vecinos_para_confirmar = 3, pasos_extension_maxima = 3
+        impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
+        _buscar(camara, impresora)
+        assert {(k["pasos_arriba"], k["vecinos_para_confirmar"], k["pasos_extension_maxima"]) for k in llamadas} \
+            == {(6, 3, 3)}, llamadas
+
+        llamadas.clear()
+        impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
+        _buscar(camara, impresora, pasos_confirmacion=4, vecinos_para_confirmar=2, pasos_extension_maxima=5)
+        assert {(k["pasos_arriba"], k["vecinos_para_confirmar"], k["pasos_extension_maxima"]) for k in llamadas} \
+            == {(4, 2, 5)}, llamadas
+
+        # y siempre con los límites de seguridad
+        assert all(k["z_min_seguridad"] == Z_MIN_SEGURIDAD and k["z_max_seguro"] == Z_ARRIBA_SEGURO for k in llamadas)
+    finally:
+        busqueda_muestra.autofocus = original
+
+    assert inspect.signature(busqueda_muestra.buscar_foco_en_xy).parameters["pasos_confirmacion"].default == 6
+
+
+def test_buscar_foco_en_xy_no_baja_nunca_de_z_min_seguridad():
+    # el foco está por debajo del límite: no se puede llegar sin cruzarlo
+    impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO, z_foco=Z_MIN_SEGURIDAD - 0.05)
+    movimientos = _espiar_movimientos(impresora)
+
+    _tiene_que_fallar(lambda: _buscar(camara, impresora), busqueda_muestra.MuestraNoEncontrada)
+
+    assert min(m[3] for m in movimientos) >= Z_MIN_SEGURIDAD - 1e-9, min(m[3] for m in movimientos)
+
+
+def test_buscar_foco_en_xy_en_un_campo_vacio_levanta_muestra_no_encontrada_con_lo_medido():
+    impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
+    camara.con_muestra = False
+
+    try:
+        _buscar(camara, impresora)
+    except busqueda_muestra.MuestraNoEncontrada as error:
+        parcial = error.resultado_parcial
+    else:
+        raise AssertionError("un campo vacío tendría que terminar en MuestraNoEncontrada")
+
+    assert parcial["candidatos"] == []
+    assert abs(parcial["historial_barrido_grueso"][-1]["z"] - Z_MIN_SEGURIDAD) < 1e-9     # recorrió todo, hasta el límite
+    assert parcial["historial_barrido_grueso"][0]["z"] == Z_ARRIBA_SEGURO
+    assert set(parcial["linea_base"]) == set(busqueda_muestra.FUNCIONES_METRICA)
+    assert (parcial["x"], parcial["y"]) == (X, Y)
+
+
+def test_buscar_foco_en_xy_los_aumentos_son_obligatorios_y_se_rechazan_los_malos_antes_de_mover():
+    impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
+
+    # sin los aumentos no corre
+    _tiene_que_fallar(
+        lambda: _en_silencio(busqueda_muestra.buscar_foco_en_xy, camara, impresora, X, Y, Z_ARRIBA_SEGURO,
+                             Z_MIN_SEGURIDAD, DICT_GRAYSCALE),
+        TypeError,
+    )
+
+    malos = [None, "varianza", {}, {"foco": 0.3}, {"varianza": 0}, {"varianza": -0.1}, {"varianza": "mucho"},
+             {"varianza": True}, {"varianza": float("nan")}, {"laplacian": 0.3, "varianza": None}]
+
+    for malo in malos:
+        impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
+
+        _tiene_que_fallar(lambda: _buscar(camara, impresora, aumento_deteccion=malo), (ValueError, TypeError))
 
         assert impresora.ser.escrituras == [] and camara.llamadas_config_de_una == [], malo
 
 
-def _posicionar(camara, impresora, **kwargs):
-    return _en_silencio(busqueda_muestra.posicionar_en_muestra, camara, impresora, X, Y,
-                        Z_ARRIBA_SEGURO, Z_MIN_SEGURIDAD, **kwargs)
-
-
-def test_posicionar_en_muestra_una_metrica_usa_dict_params_local_solo_si_se_lo_pasan():
-    impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
-    resultado = _posicionar(camara, impresora, dict_params_global=DICT_GRAYSCALE)
-
-    assert camara.llamadas_config_de_una == [DICT_GRAYSCALE]       # el foco final sigue con la configuración global
-    assert abs(resultado["z_foco_final"] - Z_FOCO) <= PASO_Z + 1e-9
-
-    impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
-    _posicionar(camara, impresora, dict_params_global=DICT_GRAYSCALE, dict_params_local=DICT_LOCAL)
-
-    assert camara.llamadas_config_de_una == [DICT_GRAYSCALE, DICT_LOCAL]
-
-
-def test_posicionar_en_muestra_sin_foco_final_configura_la_camara_una_sola_vez():
-    impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
-
-    _posicionar(camara, impresora, dict_params_global=DICT_GRAYSCALE, hacer_foco_final=False)
-
-    assert camara.llamadas_config_de_una == [DICT_GRAYSCALE]
-
-
-def test_posicionar_en_muestra_multimetrica_pasa_los_diccionarios_a_foco_final_multimetrica():
-    impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
-
-    with tempfile.TemporaryDirectory() as carpeta:
-        resultado = _posicionar(camara, impresora, dict_params_global=DICT_GRAYSCALE,
-                                foco_final_multimetrica_activado=True, dict_params_color_foco_final=DICT_COLOR,
-                                guardar_fotos_foco_final=True, carpeta_fotos_foco_final=carpeta)
-
-        # búsqueda (global) -> barrido del foco final (sin local: el global) -> fotos (color)
-        assert camara.llamadas_config_de_una == [DICT_GRAYSCALE, DICT_GRAYSCALE, DICT_COLOR]
-        assert len(list(Path(carpeta).glob("*.jpg"))) == 7        # el máximo y 3 vecinos a cada lado
-        assert len(list(Path(carpeta).glob("*.png"))) == 1
-
-    assert resultado["foco_final_multimetrica"]["laplacian"]["confirmado"]
-
-    # con dict_params_local, ese es el del barrido del foco final
-    impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
-    _posicionar(camara, impresora, dict_params_global=DICT_GRAYSCALE, dict_params_local=DICT_LOCAL,
-                foco_final_multimetrica_activado=True, dict_params_color_foco_final=DICT_COLOR)
-
-    assert camara.llamadas_config_de_una == [DICT_GRAYSCALE, DICT_LOCAL, DICT_COLOR]
-
-
-def test_posicionar_en_muestra_rechaza_un_diccionario_malo_o_faltante_antes_de_mover():
+def test_buscar_foco_en_xy_rechaza_los_parametros_malos_antes_de_mover():
     casos = [
-        dict(dict_params_global={"pixformat": "GRAYSCALE"}),
-        dict(dict_params_global=DICT_GRAYSCALE, dict_params_local="QVGA"),
-        # multimétrica sin el diccionario de las fotos en color (o con uno incompleto)
-        dict(dict_params_global=DICT_GRAYSCALE, foco_final_multimetrica_activado=True),
-        dict(dict_params_global=DICT_GRAYSCALE, foco_final_multimetrica_activado=True,
-             dict_params_color_foco_final={"pixformat": "RGB565", "resolucion": "WQXGA2"}),
+        dict(dict_params_global={"pixformat": "GRAYSCALE", "resolucion": "QVGA"}),
+        dict(dict_params_global="QVGA"),
+        dict(dict_params_global=None),
+        dict(z_seguro_xy=Z_ARRIBA_SEGURO - 0.1),        # la altura de viaje tiene que ser >= z_arriba_seguro
+        dict(z_seguro_xy=200.0),                        # pasa el máximo de la impresora
+        dict(z_min_seguridad=Z_ARRIBA_SEGURO),
+        dict(pasos_linea_base=0),
+        dict(pasos_linea_base=2.5),
+        dict(pasos_linea_base=True),
+        dict(pasos_linea_base=100),                     # no entra entre z_arriba_seguro y z_min_seguridad
+        dict(fotos_seguidas_para_detectar=0),
+        dict(vecinos_para_confirmar=0),
+        dict(pasos_confirmacion=-1),
+        dict(pasos_extension_maxima=1.5),
+        dict(paso_grueso=0),
+        dict(margen_confirmacion=-0.1),
     ]
 
     for kwargs in casos:
         impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
 
-        _tiene_que_fallar(lambda: _posicionar(camara, impresora, **kwargs), (ValueError, TypeError))
+        _tiene_que_fallar(lambda: _buscar(camara, impresora, **kwargs), (ValueError, TypeError))
 
         assert impresora.ser.escrituras == [] and camara.llamadas_config_de_una == [], kwargs
 
-    # sin foco final multimétrica, el diccionario de color no hace falta
+
+def test_buscar_foco_en_xy_sin_home_o_por_debajo_del_limite_falla_antes_de_mover():
+    impresora = crear_impresora_falsa(hacer_home=False)
+    camara = CamaraFalsa(impresora, z_foco=Z_FOCO)
+
+    _tiene_que_fallar(lambda: _buscar(camara, impresora), RuntimeError, "home")
+    assert camara.llamadas_config_de_una == []
+
+    impresora, camara = _preparar(z_inicial=Z_MIN_SEGURIDAD - 0.2)
+
+    _tiene_que_fallar(lambda: _buscar(camara, impresora), busqueda_muestra.RiesgoDeColision)
+    assert impresora.ser.escrituras == [] and camara.llamadas_config_de_una == []
+
+
+def test_buscar_foco_en_xy_ya_no_acepta_lo_de_las_dos_funciones_que_reemplaza():
     impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
-    _posicionar(camara, impresora, dict_params_global=DICT_GRAYSCALE, foco_final_multimetrica_activado=False)
 
-
-def test_posicionar_en_muestra_ya_no_acepta_los_parametros_sueltos_de_antes():
-    impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
-
-    for viejos in (dict(resolucion_global="QVGA"), dict(pixformat_global="GRAYSCALE"), dict(resolucion_local="QVGA"),
-                   dict(pixformat_color_foco_final="RGB565"), dict(resolucion_color_foco_final="4K")):
-        _tiene_que_fallar(lambda: _posicionar(camara, impresora, dict_params_global=DICT_GRAYSCALE, **viejos),
-                          TypeError)
+    for viejos in (dict(verificar_presencia=False), dict(alturas_verificacion=3), dict(umbral_intensidad_fondo=150),
+                   dict(hacer_foco_final=False), dict(dict_params_local=DICT_LOCAL), dict(criterios_deteccion={}),
+                   dict(foco_final_multimetrica_activado=True), dict(dict_params_color_foco_final=DICT_COLOR),
+                   dict(resolucion_global="QVGA"), dict(pixformat_global="GRAYSCALE")):
+        _tiene_que_fallar(lambda: _buscar(camara, impresora, **viejos), TypeError)
 
     assert impresora.ser.escrituras == []
+
+    # y las dos funciones viejas ya no existen (sin alias: las aplicaciones viejas tienen que fallar fuerte)
+    assert not hasattr(busqueda_muestra, "buscar_muestra_en_z")
+    assert not hasattr(busqueda_muestra, "posicionar_en_muestra")
+
+
+def test_buscar_foco_en_xy_no_llama_a_verificar_presencia_muestra_que_queda_suelta():
+    original = busqueda_muestra.verificar_presencia_muestra
+    llamadas = []
+
+    busqueda_muestra.verificar_presencia_muestra = lambda *a, **k: llamadas.append(1) or True
+
+    try:
+        impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
+        _buscar(camara, impresora)
+    finally:
+        busqueda_muestra.verificar_presencia_muestra = original
+
+    assert llamadas == []
+    assert "SUELTA" in busqueda_muestra.verificar_presencia_muestra.__doc__
+    assert issubclass(busqueda_muestra.CampoVisualSinMuestra, busqueda_muestra.MuestraNoEncontrada)
+    assert "SUELTA" in busqueda_muestra.CampoVisualSinMuestra.__doc__
+
+
+def test_la_verificacion_de_presencia_suelta_sigue_funcionando_por_su_cuenta():
+    impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
+    capturas = []
+    capturar_original = camara.capturar
+    camara.capturar = lambda: (capturas.append((camara.pixformat, camara.framesize)), capturar_original())[1]
+
+    hay = _en_silencio(busqueda_muestra.verificar_presencia_muestra, camara, impresora, Z_ARRIBA_SEGURO,
+                       Z_MIN_SEGURIDAD, resolucion="VGA", umbral_intensidad_fondo=100)
+
+    assert hay is True and capturas[0] == ("RGB565", "VGA"), capturas[:2]
+
+    impresora, camara = _preparar(z_inicial=Z_ARRIBA_SEGURO)
+    camara.con_muestra = False
+
+    assert _en_silencio(busqueda_muestra.verificar_presencia_muestra, camara, impresora, Z_ARRIBA_SEGURO,
+                        Z_MIN_SEGURIDAD, umbral_intensidad_fondo=100) is False

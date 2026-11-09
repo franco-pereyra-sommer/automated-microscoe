@@ -2,6 +2,7 @@
 
 
 
+import numbers
 import time
 from pathlib import Path
 from datetime import datetime
@@ -11,11 +12,13 @@ import matplotlib.pyplot as plt
 
 # Módulos base del proyecto
 from camara_openmv import bytes_a_imagen, validar_dict_params_camara
+import impresora_cosmos
 from metricas_imagen import (
-    CRITERIOS_POR_DEFECTO,
     FUNCIONES_METRICA,
-    evaluar_criterios,
+    detectar_aumento,
     intensidad_fondo,
+    linea_de_base,
+    validar_aumentos,
 )
 
 
@@ -24,11 +27,19 @@ from metricas_imagen import (
 # ============================================================
 
 class MuestraNoEncontrada(Exception):
+    """buscar_foco_en_xy() bajó hasta z_min_seguridad sin confirmar el foco.
+    Trae lo medido en el atributo 'resultado_parcial' (línea de base, umbrales,
+    candidatos descartados e historial), para poder ver qué pasó."""
     pass
 
 
 class CampoVisualSinMuestra(MuestraNoEncontrada):
-    """La verificación temprana (intensidad de fondo) indica que
+    """SUELTA desde el 2026-11-09: ya no la lanza ninguna función de la base
+    (la lanzaba la verificación de presencia de buscar_muestra_en_z(), que
+    desapareció). La importan aplicaciones (26.10.08, 26.10.13); se deja
+    hasta que se haga limpieza.
+
+    La verificación temprana (intensidad de fondo) indica que
     este (x, y) no tiene glóbulos rojos en ninguna altura razonable."""
     pass
 
@@ -416,6 +427,8 @@ def verificar_presencia_muestra(
     devolveme_la_respuesta=False,
 ):
     """
+    SUELTA desde el 2026-11-09 (no la llama ninguna función de la base; se decide en la limpieza).
+
     Chequeo rápido ANTES del barrido grueso: revisa unas pocas alturas
     de Z (con pixformat RGB565, que es como se calibró el umbral) y
     decide si a este (x, y) le vale la pena buscarle foco.
@@ -471,86 +484,147 @@ def verificar_presencia_muestra(
 
 
 # ============================================================
-# FASES 1 y 2: BARRIDO GRUESO + CONFIRMACIÓN ANTI-SEÑAL-FALSA
+# BÚSQUEDA DEL FOCO EN UN (x, y): ir, línea de base, detección relativa
+# y confirmación con autofocus()
 # ============================================================
 
-def buscar_muestra_en_z(
+def _entero(valor, nombre, minimo):
+    if isinstance(valor, bool) or not isinstance(valor, numbers.Integral):
+        raise TypeError(f"'{nombre}' tiene que ser un entero, no {valor!r}")
+
+    if valor < minimo:
+        raise ValueError(f"'{nombre}' tiene que ser >= {minimo}, no {valor}")
+
+
+def buscar_foco_en_xy(
     camara,
     impresora,
+    x,
+    y,
     z_arriba_seguro,
     z_min_seguridad,
     dict_params_global,
+    aumento_deteccion,
+    z_seguro_xy=40.0,
+    pasos_linea_base=5,
+    fotos_seguidas_para_detectar=2,
     paso_grueso=0.005,
     paso_fino=0.0025,
-    criterios_deteccion=None,
     margen_confirmacion=0.15,
-    pasos_confirmacion=10,
+    pasos_confirmacion=6,
+    vecinos_para_confirmar=3,
     pasos_extension_maxima=3,
-    verificar_presencia=False,
-    alturas_verificacion=3,
-    umbral_intensidad_fondo=152.5,
+    feedrate_xy=3000,
     espera_movimiento=0.5,
     devolveme_la_respuesta=False,
 ):
     """
-    Devuelve un diccionario:
-        {
-            "z_confirmado": ...,
-            "metrica_confirmada": "laplacian" | "tenengrad" | "varianza",
-            "valor_confirmado": ...,
-            "historial_barrido_grueso": [...],
-        }
+    Lleva la platina a (x, y), baja en Z hasta que las métricas de enfoque suben respecto de una línea de base y deja la platina en el máximo confirmado.
 
-    'dict_params_global': diccionario con los parámetros de la cámara
-    para todo el barrido (pixformat, resolucion, exposure_us, gain_db,
-    whitebal; ver OpenMVCamera.config_de_una()). Es obligatorio. Se
-    valida antes de mover nada. Lo usan el barrido grueso y la
-    confirmación (autofocus()); la verificación temprana solo toma de
-    ahí la resolución (siempre revisa en RGB565, que es como se calibró
-    su umbral).
+    Antiguo: buscar_muestra_en_z() y posicionar_en_muestra() (2026-11-09: se unieron en
+    esta; ya no verifica la presencia de la muestra ni hace foco final: si hace falta,
+    se lo pide a autofocus() o a foco_final_multimetrica() desde afuera, con la platina
+    donde esta función la deja).
+
+    Pasos:
+    1) moverse_a_xy() a (x, y) con 'z_seguro_xy' como altura de viaje (los viajes largos
+       suben hasta ahí; los cortos mantienen el Z) y después va a 'z_arriba_seguro'.
+       Si la platina no llegó a (x, y) (destino fuera de rango) se detiene con
+       RuntimeError, sin bajar.
+    2) Configura la cámara con 'dict_params_global' y baja de a 'paso_grueso' sacando
+       fotos. Las primeras 'pasos_linea_base' fotos son la línea de base: el promedio
+       de cada métrica. 'z_arriba_seguro' tiene que estar lejos del foco (si no, la
+       línea de base ya incluye la subida y no se detecta nada).
+    3) Detección: una métrica detecta cuando supera su línea de base por más de su
+       aumento (promedio * (1 + aumento)) en 'fotos_seguidas_para_detectar' fotos
+       seguidas. Si lo logran varias, se elige la que más pasó su umbral. La regla
+       está en metricas_imagen.detectar_aumento().
+    4) Confirmación: autofocus() con esa métrica, alrededor de donde se detectó (paso
+       'paso_fino', 'pasos_confirmacion' hacia arriba y hacia abajo). Se confirma si
+       autofocus() confirma estructuralmente el máximo (ver su docstring) y el máximo
+       supera el umbral de detección * (1 + 'margen_confirmacion'). Si no, es una señal
+       falsa: se salta un 'paso_grueso' más abajo del punto de la detección y se sigue
+       bajando (las fotos seguidas vuelven a contarse desde cero; la línea de base es
+       la misma). Si se llega a 'z_min_seguridad' sin confirmar: MuestraNoEncontrada.
+
+    Parámetros:
+      'dict_params_global': parámetros de la cámara para todo el barrido
+        (pixformat, resolucion, exposure_us, gain_db, whitebal; ver
+        OpenMVCamera.config_de_una()). Obligatorio; se valida antes de mover nada.
+      'aumento_deteccion': {métrica: aumento}, uno por métrica que se quiere usar
+        ("laplacian", "tenengrad", "varianza"), como fracción: 0.3 = +30 % sobre el
+        promedio de la línea de base. Obligatorio y sin valores por defecto: se miden.
+        Se mide siempre las tres métricas (queda en el historial), pero solo detectan
+        las que figuren acá.
+      'z_seguro_xy': altura (mm) a la que se viaja en XY; tiene que ser >= z_arriba_seguro.
+      'vecinos_para_confirmar', 'pasos_extension_maxima': los de autofocus().
 
     Supuestos de seguridad (¡no tocar sin revisar el hardware!):
-    - Z creciente = alejarse de la muestra (más seguro).
-    - Z decreciente = acercarse a la muestra (más riesgo de choque).
-    - 'z_min_seguridad' ya tiene que venir con el margen de seguridad
-      incorporado respecto a la distancia de trabajo del objetivo
-      (300 µm). Esta función NUNCA manda una posición menor a ese
-      valor, y se lo pasa también a autofocus() para que tampoco lo
-      cruce mientras confirma un pico.
+    - Z creciente = alejarse de la muestra (más seguro); Z decreciente = acercarse.
+    - 'z_min_seguridad' ya tiene que venir con el margen respecto de la distancia de
+      trabajo del objetivo (300 µm). Esta función NUNCA manda una posición menor a ese
+      valor, y se lo pasa también a autofocus().
+    - Todo se revisa ANTES de mover: diccionario de cámara, aumentos, enteros, que
+      z_min_seguridad < z_arriba_seguro <= z_seguro_xy y que la línea de base entre
+      entre z_arriba_seguro y z_min_seguridad con lugar para detectar.
 
-    Fase 0 (opcional): verificar_presencia_muestra(). Si no hay
-    indicios de muestra en este (x, y), corta acá con
-    CampoVisualSinMuestra.
-
-    Fase 1: barrido grueso con 'paso_grueso', evaluando Laplaciano,
-    Tenengrad y Varianza de intensidad contra 'criterios_deteccion'
-    como un OR (alcanza con que una sola supere su umbral).
-
-    Fase 2: al primer disparo, corre autofocus() con la métrica que
-    disparó, con la misma configuración de cámara ('dict_params_global')
-    pero con 'paso_fino', para encontrar y confirmar estructuralmente el máximo
-    local (ver la docstring de autofocus() para el criterio de
-    confirmación). Si autofocus() no logra confirmarlo
-    (PicoNoConfirmado) o el máximo confirmado no supera umbral × (1 +
-    margen_confirmacion), se descarta como señal falsa, se salta un
-    paso_grueso más abajo del punto del disparo (para no volver a
-    toparse con la misma señal) y se retoma el barrido. Si lo supera,
-    queda confirmado (y ya posicionado ahí, porque autofocus() deja al
-    equipo en su propio máximo).
+    Devuelve un diccionario:
+        {
+            "x", "y": donde quedó la platina (en la grilla de la impresora),
+            "z_confirmado", "metrica_confirmada", "valor_confirmado",
+            "linea_base": {métrica: promedio} (las tres),
+            "umbrales_deteccion": {métrica: umbral} (las de 'aumento_deteccion'),
+            "candidatos": [una entrada por cada detección, con su resultado:
+                "confirmado" | "no_alcanza_umbral" | "pico_no_confirmado"],
+            "historial_barrido_grueso": [{"z", "fase" ("linea_base" | "barrido"),
+                "laplacian", "tenengrad", "varianza"}, ...],
+        }
+    Con MuestraNoEncontrada, el mismo diccionario sin los "confirmado" va en
+    error.resultado_parcial.
     """
 
-    validar_dict_params_camara(dict_params_global, "dict_params_global")
+    # --------------------------------------------------------
+    # Todo se revisa ANTES de mover nada
+    # --------------------------------------------------------
 
-    if criterios_deteccion is None:
-        criterios_deteccion = dict(CRITERIOS_POR_DEFECTO)
+    validar_dict_params_camara(dict_params_global, "dict_params_global")
+    validar_aumentos(aumento_deteccion, "aumento_deteccion")
+
+    _entero(pasos_linea_base, "pasos_linea_base", 1)
+    _entero(fotos_seguidas_para_detectar, "fotos_seguidas_para_detectar", 1)
+    _entero(vecinos_para_confirmar, "vecinos_para_confirmar", 1)
+    _entero(pasos_confirmacion, "pasos_confirmacion", 0)
+    _entero(pasos_extension_maxima, "pasos_extension_maxima", 0)
 
     if z_min_seguridad >= z_arriba_seguro:
         raise ValueError(
             "z_min_seguridad tiene que ser menor que z_arriba_seguro"
         )
 
+    if z_seguro_xy < z_arriba_seguro:
+        raise ValueError(
+            "z_seguro_xy (la altura de los viajes en XY) no puede ser menor "
+            "que z_arriba_seguro"
+        )
+
+    if z_seguro_xy > impresora.max_posicion_z:
+        raise ValueError(
+            f"z_seguro_xy = {z_seguro_xy} mm pasa el máximo de la impresora "
+            f"({impresora.max_posicion_z} mm)"
+        )
+
     if paso_grueso <= 0 or paso_fino <= 0:
         raise ValueError("paso_grueso y paso_fino tienen que ser positivos")
+
+    if margen_confirmacion < 0:
+        raise ValueError("margen_confirmacion no puede ser negativo")
+
+    if z_arriba_seguro - pasos_linea_base * paso_grueso < z_min_seguridad - 1e-9:
+        raise ValueError(
+            f"La línea de base ({pasos_linea_base} fotos, de a {paso_grueso} mm) "
+            f"no entra entre z_arriba_seguro ({z_arriba_seguro} mm) y "
+            f"z_min_seguridad ({z_min_seguridad} mm) con lugar para detectar."
+        )
 
     _, _, z_actual = impresora.pregunta_posicion_actual()
 
@@ -568,92 +642,105 @@ def buscar_muestra_en_z(
         )
 
     # --------------------------------------------------------
-    # Subir primero a la altura segura
+    # 1) Ir a (x, y) y a la altura desde la que empieza el barrido
     # --------------------------------------------------------
 
-    desplazamiento_a_seguro = z_arriba_seguro - z_actual
+    impresora_cosmos.moverse_a_xy(
+        impresora,
+        x,
+        y,
+        z_seguro=z_seguro_xy,
+        feedrate_xy=feedrate_xy,
+        espera_movimiento=espera_movimiento,
+        devolveme_la_respuesta=devolveme_la_respuesta,
+    )
 
-    if desplazamiento_a_seguro != 0:
+    # desp_lin_000() cancela SIN mover si el destino sale del rango: no seguir
+    # buscando en otro lado como si nada.
+    if (
+        abs(impresora.posicion_x - x) > impresora.resolucion_x + 1e-9
+        or abs(impresora.posicion_y - y) > impresora.resolucion_y + 1e-9
+    ):
+        raise RuntimeError(
+            f"La platina no llegó a (x, y) = ({x}, {y}) mm: está en "
+            f"({impresora.posicion_x}, {impresora.posicion_y}) mm. "
+            f"No se baja en Z."
+        )
+
+    _, _, z_actual = impresora.pregunta_posicion_actual()
+
+    desplazamiento_a_arriba = z_arriba_seguro - z_actual
+
+    if abs(desplazamiento_a_arriba) > 1e-9:
         impresora.desp_lin_cam(
-            0, 0, desplazamiento_a_seguro,
+            0, 0, desplazamiento_a_arriba,
             devolveme_la_respuesta=devolveme_la_respuesta,
         )
         time.sleep(espera_movimiento)
 
     # --------------------------------------------------------
-    # Fase 0: verificación temprana
-    # --------------------------------------------------------
-
-    if verificar_presencia:
-
-        hay_muestra = verificar_presencia_muestra(
-            camara=camara,
-            impresora=impresora,
-            z_arriba_seguro=z_arriba_seguro,
-            z_min_seguridad=z_min_seguridad,
-            alturas_a_revisar=alturas_verificacion,
-            umbral_intensidad_fondo=umbral_intensidad_fondo,
-            resolucion=dict_params_global["resolucion"],
-            espera_movimiento=espera_movimiento,
-            devolveme_la_respuesta=devolveme_la_respuesta,
-        )
-
-        if not hay_muestra:
-            raise CampoVisualSinMuestra(
-                f"La verificación temprana (intensidad de fondo <= "
-                f"{umbral_intensidad_fondo}) indica que este campo visual "
-                f"no tiene glóbulos rojos."
-            )
-
-        # Volver a la altura segura antes de arrancar el barrido grueso
-        _, _, z_actual = impresora.pregunta_posicion_actual()
-        desplazamiento = z_arriba_seguro - z_actual
-
-        if desplazamiento != 0:
-            impresora.desp_lin_cam(
-                0, 0, desplazamiento,
-                devolveme_la_respuesta=devolveme_la_respuesta,
-            )
-            time.sleep(espera_movimiento)
-
-    # --------------------------------------------------------
-    # Fase 1 y 2: barrido grueso + confirmación
+    # 2) a 4) Línea de base, detección relativa y confirmación
     # --------------------------------------------------------
 
     camara.config_de_una(dict_params_global)
 
     historial = []
+    candidatos = []
     resultado_confirmado = None
+    indice_desde = 0
 
-    z = z_arriba_seguro
+    z = impresora.posicion_z
 
     while True:
 
         image_data = camara.capturar()
         imagen = bytes_a_imagen(image_data)
 
-        valores, disparados = evaluar_criterios(imagen, criterios_deteccion)
+        # Se miden las tres métricas siempre (sirve para analizar después);
+        # detectan solo las de 'aumento_deteccion'.
+        valores = {nombre: funcion(imagen) for nombre, funcion in FUNCIONES_METRICA.items()}
 
-        historial.append({"z": impresora.posicion_z, **valores})
+        fase = "linea_base" if len(historial) < pasos_linea_base else "barrido"
+
+        historial.append({"z": impresora.posicion_z, "fase": fase, **valores})
 
         print(
             f"Z = {impresora.posicion_z:.4f} mm | "
             + " | ".join(f"{n} = {v:.2f}" for n, v in valores.items())
+            + (" | (línea de base)" if fase == "linea_base" else "")
         )
 
-        if disparados:
+        deteccion = detectar_aumento(
+            historial,
+            aumento_deteccion,
+            pasos_linea_base=pasos_linea_base,
+            fotos_seguidas=fotos_seguidas_para_detectar,
+            desde=indice_desde,
+        )
 
-            # Si dispararon varias, priorizo la que superó su umbral
-            # por mayor margen relativo (más probable que sea señal real).
-            nombre_disparo = max(
-                disparados, key=lambda n: valores[n] / criterios_deteccion[n]
-            )
+        if deteccion is not None:
 
+            nombre_disparo = deteccion["metrica"]
             z_disparo = impresora.posicion_z
+            umbral_deteccion = deteccion["umbrales"][nombre_disparo]
+            umbral_confirmacion = umbral_deteccion * (1 + margen_confirmacion)
+
+            candidato = {
+                "z_disparo": z_disparo,
+                "metrica": nombre_disparo,
+                "valor": deteccion["valor"],
+                "umbral_deteccion": umbral_deteccion,
+                "umbral_confirmacion": umbral_confirmacion,
+                "resultado": None,
+                "z_pico": None,
+                "valor_pico": None,
+            }
+            candidatos.append(candidato)
 
             print(
                 f"  -> Candidato: '{nombre_disparo}' en Z = {z_disparo:.4f} mm "
-                f"(valor = {valores[nombre_disparo]:.2f})"
+                f"(valor = {deteccion['valor']:.2f}, umbral de detección = "
+                f"{umbral_deteccion:.2f})"
             )
 
             margen_abajo_disponible = z_disparo - z_min_seguridad
@@ -682,7 +769,7 @@ def buscar_muestra_en_z(
                     paso_z=paso_fino,
                     espera_movimiento=espera_movimiento,
                     graficamos=False,
-                    vecinos_para_confirmar=3,
+                    vecinos_para_confirmar=vecinos_para_confirmar,
                     pasos_extension_maxima=pasos_extension_maxima,
                     z_min_seguridad=z_min_seguridad,
                     z_max_seguro=z_arriba_seguro,
@@ -690,9 +777,8 @@ def buscar_muestra_en_z(
 
                 valor_pico = max(valores_pico)
 
-                umbral_confirmacion = criterios_deteccion[nombre_disparo] * (
-                    1 + margen_confirmacion
-                )
+                candidato["z_pico"] = z_pico
+                candidato["valor_pico"] = valor_pico
 
                 if valor_pico >= umbral_confirmacion:
 
@@ -705,6 +791,8 @@ def buscar_muestra_en_z(
                         f">= {umbral_confirmacion:.2f}"
                     )
 
+                    candidato["resultado"] = "confirmado"
+
                     resultado_confirmado = {
                         "z_confirmado": z_pico,
                         "metrica_confirmada": nombre_disparo,
@@ -713,6 +801,9 @@ def buscar_muestra_en_z(
                     break
 
                 else:
+
+                    candidato["resultado"] = "no_alcanza_umbral"
+
                     print(
                         f"  -> Señal falsa descartada: {nombre_disparo} = "
                         f"{valor_pico:.2f} (el máximo se confirmó "
@@ -722,6 +813,8 @@ def buscar_muestra_en_z(
 
             except PicoNoConfirmado as motivo:
 
+                candidato["resultado"] = "pico_no_confirmado"
+
                 print(
                     f"  -> Señal falsa descartada: '{nombre_disparo}' no "
                     f"tiene un máximo confirmable ({motivo}). Se sigue "
@@ -729,9 +822,10 @@ def buscar_muestra_en_z(
                 )
 
             # Señal falsa (por cualquiera de los dos motivos de
-            # arriba): saltar un paso_grueso más abajo del punto del
-            # disparo, para no volver a toparse con la misma señal, y
-            # retomar el barrido grueso.
+            # arriba): saltar un paso_grueso más abajo del punto de la
+            # detección, para no volver a toparse con la misma señal, y
+            # retomar el barrido. Las fotos seguidas vuelven a contarse
+            # desde cero (indice_desde); la línea de base es la misma.
 
             z_siguiente = z_disparo - paso_grueso
 
@@ -746,10 +840,11 @@ def buscar_muestra_en_z(
             )
             time.sleep(espera_movimiento)
 
-            z = z_siguiente
+            z = impresora.posicion_z
+            indice_desde = len(historial)
             continue
 
-        if z <= z_min_seguridad:
+        if z - z_min_seguridad <= 1e-9:
             break
 
         paso = -min(paso_grueso, z - z_min_seguridad)
@@ -761,15 +856,33 @@ def buscar_muestra_en_z(
 
         z = impresora.posicion_z
 
+    # --------------------------------------------------------
+    # Resultado
+    # --------------------------------------------------------
+
+    base = linea_de_base(historial, FUNCIONES_METRICA, pasos_linea_base)
+
+    medido = {
+        "x": impresora.posicion_x,
+        "y": impresora.posicion_y,
+        "linea_base": base,
+        "umbrales_deteccion": (
+            None if base is None
+            else {n: base[n] * (1 + a) for n, a in aumento_deteccion.items()}
+        ),
+        "candidatos": candidatos,
+        "historial_barrido_grueso": historial,
+    }
+
     if resultado_confirmado is None:
-        raise MuestraNoEncontrada(
-            f"No se confirmó la muestra entre Z = {z_arriba_seguro} mm y "
-            f"Z = {z_min_seguridad} mm en esta posición (x, y)."
+        error = MuestraNoEncontrada(
+            f"No se confirmó el foco entre Z = {z_arriba_seguro} mm y "
+            f"Z = {z_min_seguridad} mm en (x, y) = ({x}, {y})."
         )
+        error.resultado_parcial = medido
+        raise error
 
-    resultado_confirmado["historial_barrido_grueso"] = historial
-
-    return resultado_confirmado
+    return {**resultado_confirmado, **medido}
 
 
 # ============================================================
@@ -834,7 +947,7 @@ def foco_final_multimetrica(
     graficamos=True,
 ):
     """
-    Pensada para usarse justo después de que buscar_muestra_en_z()
+    Pensada para usarse justo después de que buscar_foco_en_xy()
     confirma una muestra (es decir, arrancando ya cerca del plano de
     foco). Barre en Z UNA sola vez, con la cámara configurada con
     'dict_params_grayscale' (pensada para GRAYSCALE), evaluando las tres
@@ -1309,250 +1422,6 @@ def foco_final_multimetrica(
 
 
 # ============================================================
-# ORQUESTADOR: (x, y) -> PLANO DE ENFOQUE IDEAL
-# ============================================================
-
-def posicionar_en_muestra(
-    camara,
-    impresora,
-    x,
-    y,
-    z_arriba_seguro,
-    z_min_seguridad,
-    dict_params_global,
-    dict_params_local=None,
-    paso_grueso=0.005,
-    paso_fino=0.0025,
-    criterios_deteccion=None,
-    margen_confirmacion=0.15,
-    pasos_confirmacion=6,
-    verificar_presencia=False,
-    alturas_verificacion=3,
-    umbral_intensidad_fondo=152.5,
-    feedrate_xy=3000,
-    espera_movimiento=0.5,
-    hacer_foco_final=True,
-    metrica_foco_final=None,
-    pasos_arriba_foco_final=5,
-    pasos_abajo_foco_final=5,
-    guardar_fotos_foco_final=False,
-    carpeta_fotos_foco_final=None,
-    foco_final_multimetrica_activado=False,
-    dict_params_color_foco_final=None,
-    devolveme_la_respuesta=False,
-):
-    """
-    Automatiza el flujo completo para una posición (x, y):
-
-    Parámetros de la cámara: se pasan como diccionarios (pixformat,
-    resolucion, exposure_us, gain_db, whitebal; ver
-    OpenMVCamera.config_de_una()), que se validan antes de mover nada:
-      - 'dict_params_global' (obligatorio): la búsqueda de la muestra
-        (paso 2).
-      - 'dict_params_local' (opcional): el foco final (paso 3). Si es
-        None, el foco final sigue con 'dict_params_global' (en el modo
-        de una sola métrica no se reconfigura la cámara; en el
-        multimétrica es el diccionario del barrido, el
-        'dict_params_grayscale' de foco_final_multimetrica()).
-      - 'dict_params_color_foco_final': las fotos en color de alta
-        resolución del foco final multimétrica. Obligatorio solo si
-        'hacer_foco_final' y 'foco_final_multimetrica_activado' son True.
-
-    1) Sube a altura segura y se mueve en XY.
-    2) buscar_muestra_en_z(): verificación temprana + barrido grueso
-       + confirmación anti-señal-falsa (ver esa función).
-    3) (Opcional) foco final, con 'dict_params_local' (por defecto, el
-       mismo que 'dict_params_global'), alrededor del Z confirmado.
-       Dos modos, elegidos con 'foco_final_multimetrica_activado':
-         - False (default): autofocus() de una sola métrica (la
-           misma que confirmó la muestra, salvo que se pase
-           'metrica_foco_final'). Comportamiento de siempre.
-         - True: foco_final_multimetrica() -- confirma el máximo de
-           las tres métricas (laplacian, tenengrad, varianza) con un
-           solo barrido, y saca una foto en color de alta resolución
-           ('dict_params_color_foco_final') en cada una (agrupando
-           las que coincidan en el mismo Z).
-
-    Si 'guardar_fotos_foco_final' es True, las fotos del foco final
-    se guardan dentro de 'carpeta_fotos_foco_final' -- en el modo de
-    una sola métrica, en una subcarpeta nombrada con la posición
-    donde arranca ese foco final: "(x, y, z)"; en el modo
-    multimétrica, directamente ahí, nombradas con la/s métrica/s que
-    confirman cada foto; además de las fotos de los máximos se guardan
-    las de sus alturas vecinas y el gráfico de las tres métricas (ver
-    foco_final_multimetrica()).
-    """
-
-    # Los diccionarios se validan antes de mover nada.
-    validar_dict_params_camara(dict_params_global, "dict_params_global")
-
-    if dict_params_local is not None:
-        validar_dict_params_camara(dict_params_local, "dict_params_local")
-
-    if hacer_foco_final and foco_final_multimetrica_activado:
-        if dict_params_color_foco_final is None:
-            raise ValueError(
-                "Con 'foco_final_multimetrica_activado' hay que pasar "
-                "'dict_params_color_foco_final' (los parámetros de la "
-                "cámara para las fotos en color)."
-            )
-        validar_dict_params_camara(
-            dict_params_color_foco_final, "dict_params_color_foco_final"
-        )
-
-    # --------------------------------------------------------
-    # 1) Altura segura antes de moverse en XY
-    # --------------------------------------------------------
-
-    _, _, z_actual = impresora.pregunta_posicion_actual()
-
-    if z_actual is None:
-        raise RuntimeError("Llamá primero a impresora.home()")
-
-    if z_actual < z_arriba_seguro:
-        impresora.desp_lin_cam(
-            0, 0, z_arriba_seguro - z_actual,
-            devolveme_la_respuesta=devolveme_la_respuesta,
-        )
-        time.sleep(espera_movimiento)
-
-    impresora.desp_lin_000(
-        x=x, y=y, z=z_arriba_seguro,
-        feedrate=feedrate_xy,
-        devolveme_la_respuesta=devolveme_la_respuesta,
-    )
-    time.sleep(espera_movimiento)
-
-    # --------------------------------------------------------
-    # 2) Verificación + barrido grueso + confirmación
-    # --------------------------------------------------------
-
-    resultado_busqueda = buscar_muestra_en_z(
-        camara=camara,
-        impresora=impresora,
-        z_arriba_seguro=z_arriba_seguro,
-        z_min_seguridad=z_min_seguridad,
-        dict_params_global=dict_params_global,
-        paso_grueso=paso_grueso,
-        paso_fino=paso_fino,
-        criterios_deteccion=criterios_deteccion,
-        margen_confirmacion=margen_confirmacion,
-        pasos_confirmacion=pasos_confirmacion,
-        verificar_presencia=verificar_presencia,
-        alturas_verificacion=alturas_verificacion,
-        umbral_intensidad_fondo=umbral_intensidad_fondo,
-        espera_movimiento=espera_movimiento,
-        devolveme_la_respuesta=devolveme_la_respuesta,
-    )
-
-    resultado = {
-        "x": x,
-        "y": y,
-        "z_confirmado": resultado_busqueda["z_confirmado"],
-        "metrica_confirmada": resultado_busqueda["metrica_confirmada"],
-        "valor_confirmado": resultado_busqueda["valor_confirmado"],
-        "historial_barrido_grueso": resultado_busqueda["historial_barrido_grueso"],
-        "z_foco_final": None,
-        "posiciones_z_foco_final": None,
-        "valores_metrica_foco_final": None,
-    }
-
-    # --------------------------------------------------------
-    # 3) Foco final con dict_params_local
-    # --------------------------------------------------------
-
-    if hacer_foco_final and foco_final_multimetrica_activado:
-
-        carpeta_guardado_final = None
-
-        if guardar_fotos_foco_final:
-
-            if carpeta_fotos_foco_final is None:
-                raise ValueError(
-                    "Si 'guardar_fotos_foco_final' es True hay que "
-                    "pasar 'carpeta_fotos_foco_final'."
-                )
-
-            carpeta_guardado_final = Path(carpeta_fotos_foco_final)
-
-        resultado["foco_final_multimetrica"] = foco_final_multimetrica(
-            camara=camara,
-            impresora=impresora,
-            dict_params_grayscale=(
-                dict_params_local if dict_params_local is not None else dict_params_global
-            ),
-            dict_params_color=dict_params_color_foco_final,
-            z_min_seguridad=z_min_seguridad,
-            z_max_seguro=z_arriba_seguro,
-            paso_z=paso_fino,
-            pasos_arriba=pasos_arriba_foco_final,
-            pasos_abajo=pasos_abajo_foco_final,
-            espera_movimiento=espera_movimiento,
-            guardamos=guardar_fotos_foco_final,
-            carpeta_guardado=carpeta_guardado_final,
-            graficamos=False,
-        )
-
-    elif hacer_foco_final:
-
-        metrica_final = (
-            metrica_foco_final
-            or FUNCIONES_METRICA[resultado_busqueda["metrica_confirmada"]]
-        )
-
-        z_confirmado = resultado_busqueda["z_confirmado"]
-
-        margen_disponible_abajo = z_confirmado - z_min_seguridad
-        pasos_abajo_reales = max(
-            min(pasos_abajo_foco_final, int(margen_disponible_abajo // paso_fino)),
-            0,
-        )
-
-        if dict_params_local is not None:
-            camara.config_de_una(dict_params_local)
-        # Sin dict_params_local la cámara ya está con dict_params_global
-        # (la dejó así buscar_muestra_en_z): no hace falta reconfigurarla.
-
-        carpeta_guardado_final = None
-
-        if guardar_fotos_foco_final:
-
-            if carpeta_fotos_foco_final is None:
-                raise ValueError(
-                    "Si 'guardar_fotos_foco_final' es True hay que "
-                    "pasar 'carpeta_fotos_foco_final'."
-                )
-
-            nombre_carpeta = (
-                f"({impresora.posicion_x}, "
-                f"{impresora.posicion_y}, "
-                f"{impresora.posicion_z})"
-            )
-
-            carpeta_guardado_final = Path(carpeta_fotos_foco_final) / nombre_carpeta
-
-        mejor_z, posiciones_z_final, valores_final = autofocus(
-            camara=camara,
-            impresora=impresora,
-            metrica=metrica_final,
-            pasos_arriba=pasos_arriba_foco_final,
-            pasos_abajo=pasos_abajo_reales,
-            paso_z=paso_fino,
-            espera_movimiento=espera_movimiento,
-            graficamos=False,
-            guardamos=guardar_fotos_foco_final,
-            carpeta_guardado=carpeta_guardado_final,
-            z_min_seguridad=z_min_seguridad,
-        )
-
-        resultado["z_foco_final"] = mejor_z
-        resultado["posiciones_z_foco_final"] = posiciones_z_final
-        resultado["valores_metrica_foco_final"] = valores_final
-
-    return resultado
-
-
-# ============================================================
 # EJEMPLO DE USO
 # ============================================================
 
@@ -1564,19 +1433,23 @@ def posicionar_en_muestra(
 #     "whitebal": (66.22236, 61.43028, 60.206),
 # }
 #
-# resultado = posicionar_en_muestra(
+# # Los aumentos se miden (no hay valores por defecto): 0.3 = +30 % sobre la línea de base.
+# aumento_deteccion = {"laplacian": ..., "tenengrad": ..., "varianza": ...}
+#
+# resultado = buscar_foco_en_xy(
 #     camara=cam,
 #     impresora=grua,
 #     x=150.0,
 #     y=100.0,
-#     z_arriba_seguro=27.9,   # MAYOR Z = más lejos de la muestra (seguro)
+#     z_arriba_seguro=27.9,   # MAYOR Z = más lejos de la muestra (seguro); lejos del foco
 #     z_min_seguridad=27.5,   # límite inferior, con margen del objetivo
 #     dict_params_global=dict_params_grayscale,
-#     hacer_foco_final=True,
+#     aumento_deteccion=aumento_deteccion,
 # )
 #
 # print(resultado["z_confirmado"], resultado["metrica_confirmada"])
-# print(resultado["z_foco_final"])
+# # El autofoco final, si hace falta, se hace desde afuera: autofocus() o
+# # foco_final_multimetrica(), con la platina donde quedó.
 
 
 #%%

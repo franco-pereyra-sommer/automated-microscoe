@@ -39,7 +39,7 @@ CÓMO USAR ESTE ARCHIVO
      -> un módulo de combinación con el nombre de la tarea; recibe `camara` e `impresora` por
         parámetro. NO se agrega todo a busqueda_muestra.py: ahí solo va lo de buscar la muestra y
         enfocar.
-        Ejemplos: autofocus, posicionar_en_muestra.
+        Ejemplos: autofocus, buscar_foco_en_xy.
   6) ¿Es específica de una sola aplicación, o todavía está en prueba?
      -> se queda en la aplicación. Si sirve más allá, se la propone para la base (sección 5); lo
         decide Franco.
