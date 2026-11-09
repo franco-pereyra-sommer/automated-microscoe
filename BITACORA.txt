@@ -6,8 +6,8 @@ CÓMO USAR ESTE ARCHIVO
     pega entera solo si hace falta; si no, pegar la línea de la aplicación que se retoma.
   - Es un resumen a propósito: una línea por aplicación y su estado. El detalle (mediciones, gráficos,
     qué se probó) está en el cuaderno de laboratorio de Franco, no acá.
-  - Estados de una aplicación: TERMINADO | EN PRUEBA | NO PROBADO | ABANDONADO. "?" = falta que Franco
-    lo confirme. Para cambiar uno alcanza con decirlo ("poné 26.10.29 como TERMINADO").
+  - Estados de una aplicación: PROBADO | EN PRUEBA | NO PROBADO | ABANDONADO. Para cambiar uno alcanza
+    con decirlo ("poné 26.10.29 como PROBADO").
   - Las secciones C (tabla de aplicaciones) y el índice de API de PROYECTO_CONTEXTO.txt son
     AUTOGENERADAS: python herramientas/generar_indice.py. No editarlas a mano.
 
@@ -259,65 +259,77 @@ Resumen: de 15 carpetas, 9 importan módulos descontinuados y 3 importan nombres
 ======================================================================================================
 D. APLICACIONES (en orden cronológico; la fecha de la carpeta es la de inicio)
 ======================================================================================================
-  Estado: TERMINADO | EN PRUEBA | NO PROBADO | ABANDONADO | ? (a confirmar con Franco).
+  Estados: PROBADO (se corrió en el equipo y anduvo para lo que se quería; no quiere decir "terminado":
+  la base puede seguir mejorándose) | EN PRUEBA | NO PROBADO | ABANDONADO.
   Qué módulos base importa cada una y si todavía le funciona: sección C.
 
-[26.08.16] En busca del enfoque automático local -- Estado: ?
-  Primer autoenfoque en Z con una métrica de enfoque (hoy: busqueda_muestra.autofocus()).
+[26.08.16] En busca del enfoque automático local -- PROBADO, en la base
+  Primer autoenfoque en Z con una métrica de enfoque; hoy es busqueda_muestra.autofocus().
 
-[26.08.17] Determinar el tiempo transcurrido en el movimiento de una orden -- Estado: ?
-  Sincronizar Python con la impresora: esperar a que los motores se detengan antes de disparar la
-  cámara. Hoy: impresora_cosmos.esperar_fin_movimiento() (M400 + M114); ver pendientes 8 y 9.
+[26.08.17] Determinar el tiempo transcurrido en el movimiento de una orden -- PROBADO
+  Comunicación satisfactoria: la cámara espera a que la impresora deje de moverse y recién ahí saca la
+  foto. Igual se sigue usando time.sleep(): el sistema óptico vibra y se espera a que las vibraciones
+  bajen. Hoy: impresora_cosmos.esperar_fin_movimiento().
 
-[26.08.18] Viendo las métricas de las mediciones de hoy -- Estado: ?
-  Gráficos de las métricas de enfoque de las mediciones del día.
+[26.08.18] Viendo las métricas de las mediciones de hoy -- PROBADO
+  Gráficos de las métricas de enfoque de las mediciones del día; grafica bien.
 
-[26.08.20] Barrido más video -- Estado: ?
-  Barrido que además graba video.
+[26.08.20] Barrido más video -- PROBADO
+  Barrido muy simple en Z para ver si autofocus() funcionaba. Pese al nombre, nunca se tomó video.
 
-[26.08.21] Configuración del tomado de fotos -- Estado: ?
-  Elegir y probar los parámetros de la cámara para sacar fotos (relacionado con config_de_una()).
+[26.08.21] Configuración del tomado de fotos -- PROBADO
+  Quería ser un barrido de parámetros de la cámara, pero (en la versión vieja) no los cambia.
+  Relacionado con config_de_una().
 
-[26.08.27] Servidor -- Estado: ?
-  Servidor web para mostrar fotos y videos del barrido y elegir la foto mejor enfocada (plan: Raspberry
-  Pi; la carpeta tiene un codigo_mateo.py).
+[26.08.27] Servidor -- EN PRUEBA
+  Servidor web que funciona y al que se le cargan fotos, para que el operador vea las fotos y videos
+  del resultado en el celular. Se lo está llevando a una Raspberry Pi; el código que corre ahí no está
+  en el repo (la carpeta tiene un codigo_mateo.py).
 
-[26.09.01] Barrido para mosaico -- Estado: ?
-  Primer barrido para armar un mosaico. Continúa en 26.09.29.
+[26.09.01] Barrido para mosaico -- PROBADO
+  Parece que servía para guardar imágenes y analizarlas después (Franco no lo recuerda con certeza).
+  Continúa en 26.09.29.
 
-[26.09.06] Tres tipos de campos visuales -- Estado: ?
+[26.09.06] Tres tipos de campos visuales -- PROBADO, en la base
   Distinguir si hay muestra y a qué altura: tipo 1 sin muestra o lejos, tipo 2 glóbulos desenfocados,
   tipo 3 cerca del foco (2 y 3 valen igual para la detección gruesa). Todo el procesamiento pasó a
   GRAYSCALE. Los umbrales vigentes están en metricas_imagen.CRITERIOS_POR_DEFECTO (pendiente 7).
 
-[26.09.11] Barrido en Z grueso -- Estado: ?
-  Encontrar la altura de la muestra con un barrido grueso en Z, confirmarla y hacer un autoenfoque fino.
-  Hoy: busqueda_muestra.buscar_muestra_en_z() y autofocus(). Un archivo se llama ..._NO_PROBADO.
+[26.09.11] Barrido en Z grueso -- PROBADO
+  Guardar imágenes de un barrido grueso en Z y analizar sus métricas. El archivo ..._NO_PROBADO es uno
+  que ese día no se corrió; posicionar_en_muestra() funciona "bien" hoy. Próximo paso: usar esta
+  aplicación como base para mejorar posicionar_en_muestra() (pendiente 16).
 
-[26.09.29] Objetivo mosaico -- Estado: ?
+[26.09.29] Objetivo mosaico -- PROBADO
   Mosaico en 4K (WQXGA2): barrido en espiral con campos superpuestos, autoenfoque en cada posición y
-  reconstrucción con Fiji (Grid/Collection Stitching). Hay varias versiones "outdated".
+  reconstrucción con Fiji (Grid/Collection Stitching). Funcionó con "radio" 1, con la muestra de
+  glóbulos rojos y con la de parásitos fijados. Hay varias versiones "outdated".
 
-[26.10.02] Sacándole fotos al borde -- Estado: ?
-  Grilla de campos alrededor de un borde de la muestra, con una foto en color enfocada en cada uno
-  (interior / borde / vacío), para clasificarlas a mano y calibrar umbrales.
+[26.10.02] Sacándole fotos al borde -- PROBADO
+  Grilla de campos alrededor de un borde de la muestra, con una foto en color enfocada en cada uno.
+  Funciona. El código se fue haciendo difícil de leer (explotó en 26.10.16): de ahí las reglas de
+  REGLAS_CODIGO.txt.
 
-[26.10.08] Detección del borde + plano de la muestra aproximado -- Estado: ?
-  Distinguir interior / borde / vacío por cómo se reparten células y fondo (Otsu), y barrido en "T"
-  con autoenfoque para ajustar el plano de enfoque aproximado de la muestra.
+[26.10.08] Detección del borde + plano de la muestra aproximado -- EN PRUEBA
+  Dos ideas, ninguna probada del todo: (1) barrido en "T" que detecte el borde, pare y siga en la
+  dirección siguiente (hoy no detecta bien el borde); (2) ajustar un plano a esas coordenadas y ver si
+  ir a (x, y, z_plano(x, y)) + autofocus() alcanza para que la imagen quede enfocada.
 
-[26.10.13] HDR -- Estado: ?
-  Foto HDR: varias exposiciones fusionadas (Mertens, OpenCV).
+[26.10.13] HDR -- PROBADO, no está en la base
+  Foto HDR: varias exposiciones fusionadas (Mertens, OpenCV). Funciona.
 
-[26.10.16] Detector de puntos violetas y sus fotos -- Estado: EN PRUEBA
-  Detectar puntos violetas (glóbulos rojos teñidos) en un preparado fijo, centrar la imagen en cada uno
-  (dentro de la celda de 12.5 µm de la impresora) y fotografiarlo sin repetir fotos. El barrido se
-  probó en simulador; falta confirmar el centrado en el equipo (ver 26.10.29). Ojo: FOV_X_MM y
-  FOV_Y_MM estaban al revés en correr_barrido_puntos.py y eso desvirtuaba el centrado.
+[26.10.16] Detector de puntos violetas y sus fotos -- EN PRUEBA
+  Detectar puntos violetas, centrar la imagen en cada uno (dentro de la celda de 12.5 µm de la
+  impresora) y fotografiarlo sin repetir fotos. Un barrido devolvió una sola foto, con un glóbulo
+  violeta que no se ve centrado. Preguntas abiertas: (1) ¿fotografía todos los puntos que encuentra o
+  deja algunos? (se responde mirando una por una las fotos del barrido); (2) ¿centra bien? (lo prueba
+  26.10.29). Ojo: FOV_X_MM y FOV_Y_MM estaban al revés en correr_barrido_puntos.py y desvirtuaban el
+  centrado.
 
-[26.10.29] Test de centrado -- Estado: EN PRUEBA
-  Comprueba en el equipo que mover la impresora para "centrar" un píxel elegido al azar lo deja de verdad
-  en el centro (usa centrado.py de 26.10.16). Según el encabezado de la app, todavía no se corrió.
+[26.10.29] Test de centrado -- NO PROBADO
+  Prueba por separado que mover la impresora para centrar un píxel elegido al azar lo deja de verdad en
+  el centro (usa centrado.py de 26.10.16). Se hizo porque el sistema óptico cambia todo el tiempo y así
+  no hay que reconfigurar la cámara ni la detección de puntos violetas. Todavía no se corrió.
 
 
 ======================================================================================================
@@ -341,7 +353,8 @@ E. PENDIENTES E IDEAS
       Recalibrar con imágenes clasificadas.
   Técnicos
    8. Sincronización con la impresora: confirmar en el equipo que M400 + M114 espera de verdad (las
-      notas de oct. lo daban sin resolver).
+      notas de oct. lo daban sin resolver). Franco (2026-11-09): en 26.08.17 la espera quedó satisfactoria;
+      se sigue usando time.sleep() por las vibraciones del sistema óptico.
    9. home() y el fin de movimiento (EN PRUEBA, Franco): G28 emite por sí solo una línea de posición
       como la de M114; Franco sospecha que son dos. Síntoma: la celda termina de correr y la
       impresora sigue moviéndose.
@@ -363,8 +376,8 @@ E. PENDIENTES E IDEAS
       2026-11-09 pruebas básicas con la cámara falsa (diccionarios de cámara, rechazo antes de mover,
       fotos vecinas y gráfico, límites). Falta cubrir más casos: señal falsa y extensión del barrido en
       buscar_muestra_en_z, CampoVisualSinMuestra, y el modo de una métrica con guardado de fotos.
-  12. Servidor web en Raspberry Pi para elegir la foto mejor enfocada (plan; hardware y puertos por
-      definir).
+  12. Servidor web (26.08.27): funciona; se lo está llevando a una Raspberry Pi para que el operador
+      vea las fotos y videos en el celular. Ese código no está en el repo.
   13. Parásitos: preparado fijo primero, después vivos por movimiento (hoja de ruta).
   14. Actualizar las aplicaciones que importan nombres que ya no existen (sección C) y las que
       quedaron rotas por el cambio de parámetros de cámara del 2026-11-09 (lista en el registro de
@@ -373,11 +386,13 @@ E. PENDIENTES E IDEAS
       exposición y ganancia en automático si no se las pasan (y no tiene balance de blancos), y
       verificar_presencia_muestra() no toca exposición, ganancia ni balance de blancos. Decidir si
       pasan también a diccionarios (2026-11-09: no se tocaron, no estaba pedido).
+  16. autofocus() está dando problemas (Franco, 2026-11-09). Próximo paso: usar 26.09.11 como base para
+      mejorar posicionar_en_muestra().
 
 
 ======================================================================================================
 F. PLANTILLA DE ENTRADA (sección D)
 ======================================================================================================
-  [YY.MM.DD] <descripción de la carpeta> -- Estado: TERMINADO | EN PRUEBA | NO PROBADO | ABANDONADO
+  [YY.MM.DD] <descripción de la carpeta> -- PROBADO | EN PRUEBA | NO PROBADO | ABANDONADO
     <una o dos líneas: qué hace y, solo si hace falta, un dato que no convenga olvidar>
   El detalle (mediciones, gráficos, qué se probó) va en el cuaderno de laboratorio.

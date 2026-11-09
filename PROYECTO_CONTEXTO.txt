@@ -10,7 +10,7 @@ CÓMO USAR ESTE ARCHIVO
   - Lo marcado "(a confirmar)" viene de notas de chats anteriores y no está verificado en el código.
   - Estos .txt son un resumen a propósito: no llevan el detalle de los experimentos (mediciones,
     gráficos, qué se probó), que está en el cuaderno de laboratorio de Franco. De cada aplicación solo
-    se anota una línea y su estado (TERMINADO, EN PRUEBA, NO PROBADO, ABANDONADO) en BITACORA.txt.
+    se anota una línea y su estado (PROBADO, EN PRUEBA, NO PROBADO, ABANDONADO) en BITACORA.txt.
 
 
 1. OBJETIVO
@@ -35,6 +35,9 @@ CÓMO USAR ESTE ARCHIVO
       posición; el buffer de entrada no se vacía. Si queda una línea de más (G28 emite la suya),
       todas las esperas siguientes vuelven un movimiento antes. Es el punto en prueba hoy: ver
       BITACORA.txt, pendiente 9.
+    - Vibraciones: el sistema óptico vibra al moverse; por eso, además de esperar el fin del
+      movimiento, se usa time.sleep() hasta que las vibraciones bajan y recién ahí se toma la foto
+      (Franco, 2026-11-09).
     - Mayor Z = objetivo MÁS LEJOS de la muestra (más seguro). Distancia de trabajo del objetivo:
       300 µm (nota). Por eso los límites de Z son críticos (ver REGLAS_CODIGO.txt, sección 7).
     - Comunicación: impresora por puerto serie a 250000 baudios; cámara a 115200 (puerto por
@@ -125,16 +128,20 @@ CÓMO USAR ESTE ARCHIVO
     - Búsqueda de muestra en Z (barrido grueso + confirmación) y autofoco global y local.
     - Mosaico: barrido en espiral con campos superpuestos + reconstrucción (Fiji, Grid/Collection
       Stitching).
-    - Detector de puntos violetas (glóbulos rojos teñidos, muy separados) en preparado fijo, con
-      centrado dentro de la celda de la grilla de la impresora y barrido sin repetir fotos (probado en
-      simulador; el centrado en el equipo está en prueba, abajo).
   En prueba
-    - Test de centrado en el equipo (26.10.29): comprobar que la impresora deja en el centro de la
-      imagen el píxel elegido (la cuenta de centrado.py de 26.10.16). Todavía no se corrió.
+    - Test de centrado en el equipo (26.10.29, todavía no se corrió): comprobar por separado que la
+      impresora deja en el centro de la imagen el píxel elegido (la cuenta de centrado.py de 26.10.16),
+      para no reconfigurar cámara y detección cada vez que cambia el sistema óptico.
+    - Detector de puntos violetas (glóbulos rojos teñidos, muy separados) en preparado fijo, con
+      centrado dentro de la celda de la grilla y barrido sin repetir fotos (26.10.16): falta ver si
+      fotografía todos los puntos y si los centra bien.
+    - Borde y plano de la muestra (26.10.08): barrido en "T" y plano de enfoque aproximado.
   Siguiente
+    - Mejorar posicionar_en_muestra() (hoy autofocus() da problemas), usando 26.09.11 como base.
     - Parásitos dentro de un preparado fijo; después parásitos vivos (por su movimiento).
-    - Servidor web (plan: Raspberry Pi) para mostrar fotos/videos y elegir la foto mejor enfocada,
-      lo que también informa qué métrica de enfoque conviene confiar.
+    - Servidor web (ya funciona; se lo está llevando a una Raspberry Pi) para que el operador vea
+      fotos/videos en el celular y elija la foto mejor enfocada, lo que también informa qué métrica de
+      enfoque conviene confiar.
   Pendientes técnicos y de orden: BITACORA.txt, sección E.
 
 
