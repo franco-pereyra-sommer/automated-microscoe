@@ -1,5 +1,5 @@
 REGLAS_CODIGO.txt -- Reglas para escribir y modificar código en env_labo7
-Versión: 2026-10-27 (Franco + Claude)
+Versión: 2026-11-09 (Franco + Claude)
 
 CÓMO USAR ESTE ARCHIVO
   Pegarlo, junto con PROYECTO_CONTEXTO.txt, al empezar un chat nuevo. Rige para todo el código nuevo.
@@ -144,6 +144,13 @@ CÓMO USAR ESTE ARCHIVO
     - Arrays de numpy: 2D si es GRAYSCALE; 3D en orden BGR si es color (como entrega
       camara_openmv.bytes_a_imagen). RGB solo para mostrar con matplotlib (mostrar() convierte).
     - Alto = filas = eje x de la impresora; ancho = columnas = eje y.
+  Cámara
+    - Los parámetros de la cámara (pixformat, resolucion, exposure_us, gain_db, whitebal) se pasan
+      SIEMPRE explícitos, en un diccionario (claves: camara_openmv.CLAVES_DICT_PARAMS_CAMARA; se revisa
+      con validar_dict_params_camara()). No hay valores por defecto: lo que no se pasa queda en
+      automático sin que se note. El modo automático se pide a propósito, con None.
+    - Una función que configura la cámara recibe ese diccionario (dict_params_<para qué>) y lo valida
+      ANTES de mover la platina.
   Documentación
     - Docstring: la PRIMERA LÍNEA dice qué hace (la usa el índice de API autogenerado); después el
       por qué y los casos raros. Una función sin docstring aparece en el índice sin descripción.
@@ -210,7 +217,7 @@ CÓMO USAR ESTE ARCHIVO
     Módulos base que usa: camara_openmv (OpenMVCamera), impresora_cosmos (TrimakerCOSMOS,
         moverse_a_xy), metricas_imagen (...), ...
     Propuestas para la base (si hay): <función o constante> -- por qué sirve.
-    Estado: EN PRUEBA | FUNCIONA | ABANDONADA        Resultado: ...
+    Estado: PROBADO | EN PRUEBA | NO PROBADO | ABANDONADO        Resultado: ...
     """
 
   Encabezado de una COPIA de un módulo base dentro de una aplicación

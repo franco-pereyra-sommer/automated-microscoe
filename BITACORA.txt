@@ -43,6 +43,10 @@ A. REGISTRO DE CAMBIOS DE LOS MÓDULOS BASE
     Cambio de comportamiento: en el modo de una métrica el foco final ya no manda set_framesize(); si se
     pasa dict_params_local reconfigura la cámara con config_de_una(), y si no, no la toca (ya está con
     el global).
+  - REGLAS_CODIGO.txt (2026-11-09, Franco lo pidió después): sección 8, nuevo apartado "Cámara" (los
+    parámetros de la cámara se pasan siempre explícitos, en un diccionario) y la plantilla de
+    encabezado (sección 12) usa los estados de la bitácora (PROBADO / EN PRUEBA / NO PROBADO /
+    ABANDONADO).
   - Sin cambios, a propósito: verificar_presencia_muestra() no usa config_de_una(): fija RGB565 y la
     resolución (de dict_params_global) y no toca exposición, ganancia ni balance de blancos, que quedan
     como estaban. config_autofoco_local() tampoco cambió. Ver pendiente 15.
