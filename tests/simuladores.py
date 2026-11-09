@@ -21,7 +21,8 @@ Qué hay:
     para probar la clase REAL OpenMVCamera.
   - CamaraFalsa: reemplaza a OpenMVCamera en las funciones que combinan
     cámara + impresora; capturar() devuelve un JPEG cuyo enfoque depende de la
-    Z de la impresora (hay un plano de foco simulado).
+    Z de la impresora (hay un plano de foco simulado). info() informa lo último
+    que recibió config_de_una() (agregado el 2026-11-09, para 26.11.09).
   - CamaraFalsaConMuestra: una CamaraFalsa que VE una muestra (glóbulos y
     puntos violetas al azar): la imagen depende de la posición (x, y) de la
     impresora, con una escala µm/px y unos signos de ejes configurables. Sirve
@@ -277,6 +278,8 @@ class CamaraFalsa:
         self.capturas = 0
         self.archivos_guardados = []
         self.llamadas_config_de_una = []
+        self.llamadas_info = 0
+        self.info_falla = False
 
         generador = np.random.default_rng(semilla)
         self._textura = np.clip(
@@ -325,6 +328,26 @@ class CamaraFalsa:
 
     def descartar_frames(self, cantidad=2):
         pass
+
+    def info(self):
+        """
+        Igual que OpenMVCamera.info(): lo que la cámara informa de sí misma. Devuelve lo último que recibió
+        config_de_una() (None = automático se informa como 18000 us / 35 dB / balance neutro) y cuenta las
+        llamadas. Con `info_falla = True` levanta Exception, como la cámara real cuando no contesta.
+        """
+        self.llamadas_info += 1
+
+        if self.info_falla:
+            raise Exception("No se recibió información de la cámara")
+
+        ultimo = self.llamadas_config_de_una[-1] if self.llamadas_config_de_una else {}
+        whitebal = ultimo.get("whitebal") or (60.206, 60.206, 60.206)
+
+        return {
+            "exposure_us": int(ultimo.get("exposure_us") or 18000),
+            "gain_db": float(ultimo.get("gain_db") or 35.0),
+            "rgb_gain_db": tuple(float(canal) for canal in whitebal),
+        }
 
     def guardar_imagen(self, image_data, carpeta, mostrar=False, nombre=None):
         carpeta = Path(carpeta)

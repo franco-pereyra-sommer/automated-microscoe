@@ -26,8 +26,8 @@ A. REGISTRO DE CAMBIOS DE LOS MÓDULOS BASE
 2026-11-09  (Claude, a pedido de Franco: mejorar posicionar_en_muestra())
   - busqueda_muestra.py: UNA función, buscar_foco_en_xy(), reemplaza a buscar_muestra_en_z() y a
     posicionar_en_muestra(). Sin alias: los nombres viejos ya no existen (llamarlos da AttributeError;
-    importarlos, ImportError). El nombre es PROVISIONAL: Franco decide el final (renombrar es un cambio
-    por script). Lleva la platina a (x, y) con moverse_a_xy() (z_seguro_xy=40), baja desde
+    importarlos, ImportError). El nombre es el definitivo (lo confirmó Franco). Lleva la platina a (x, y)
+    con moverse_a_xy() (z_seguro_xy=40), baja desde
     z_arriba_seguro y la deja en el máximo confirmado. Ya NO verifica la presencia, ni hace foco final
     ni guarda fotos de foco final: eso se pide desde afuera (autofocus(), foco_final_multimetrica()).
   - Detección nueva (los umbrales absolutos de CRITERIOS_POR_DEFECTO dejaron de servir: a veces la
@@ -199,7 +199,7 @@ B. NOMBRES VIEJOS -> NOMBRES NUEVOS
   busqueda_muestra.FUNCIONES_METRICA                 metricas_imagen.FUNCIONES_METRICA
   busqueda_muestra.CRITERIOS_POR_DEFECTO             metricas_imagen.CRITERIOS_POR_DEFECTO
   busqueda_muestra._evaluar_criterios                metricas_imagen.evaluar_criterios
-  busqueda_muestra.buscar_muestra_en_z               busqueda_muestra.buscar_foco_en_xy  (2026-11-09; nombre provisional)
+  busqueda_muestra.buscar_muestra_en_z               busqueda_muestra.buscar_foco_en_xy  (2026-11-09)
   busqueda_muestra.posicionar_en_muestra             busqueda_muestra.buscar_foco_en_xy  (ya no verifica presencia ni hace foco final)
   Main.OpenMVCamera  (Main.py descontinuado)         camara_openmv.OpenMVCamera
   Main.TrimakerCOSMOS (Main.py descontinuado)        impresora_cosmos.TrimakerCOSMOS
@@ -220,7 +220,7 @@ B. NOMBRES VIEJOS -> NOMBRES NUEVOS
 C. QUÉ IMPORTA CADA APLICACIÓN Y SI TODAVÍA EXISTE
 ======================================================================================================
 #<<< TABLA_APPS (autogenerada: python herramientas/generar_indice.py -- no editar a mano) >>>
-Generado: 2026-11-09 23:14 (herramientas/generar_indice.py)
+Generado: 2026-11-09 23:54 (herramientas/generar_indice.py)
 Leyenda:  nombre~        = funciona solo porque ese módulo lo importa de otro (la definición está en otro lado);
           FALTA          = el nombre ya no existe en el módulo base vigente: la app falla al importarlo;
           DESCONTINUADO  = el módulo ya no está en la raíz (Main.py, metricas_enfoque.py: ver 'Oudated code').
@@ -303,7 +303,13 @@ Las apps se actualizan solo si Franco lo pide (ver REGLAS_CODIGO.txt).
   busqueda_muestra: posicionar_en_muestra
     FALTA en busqueda_muestra: posicionar_en_muestra
 
-Resumen: de 15 carpetas, 9 importan módulos descontinuados y 5 importan nombres que ya no existen en los módulos base vigentes.
+26.11.09 medicion de aumentos y parametros de camara
+  camara_openmv: OpenMVCamera, validar_dict_params_camara
+  impresora_cosmos: TrimakerCOSMOS, moverse_a_xy
+  metricas_imagen: FUNCIONES_METRICA, intensidad_fondo, laplacian_variance, linea_de_base, tenengrad, varianza_intensidad
+  busqueda_muestra: RiesgoDeColision
+
+Resumen: de 16 carpetas, 9 importan módulos descontinuados y 5 importan nombres que ya no existen en los módulos base vigentes.
 #<<< FIN_TABLA_APPS >>>
 
 
@@ -382,6 +388,13 @@ D. APLICACIONES (en orden cronológico; la fecha de la carpeta es la de inicio)
   el centro (usa centrado.py de 26.10.16). Se hizo porque el sistema óptico cambia todo el tiempo y así
   no hay que reconfigurar la cámara ni la detección de puntos violetas. Todavía no se corrió.
 
+[26.11.09] Medición de aumentos y parámetros de cámara -- NO PROBADO
+  Para elegir los aumentos ("x") de buscar_foco_en_xy() y ver qué parámetros de cámara ayudan más al
+  autofocus: un descenso completo en Z, sin detectar nada, guardando cada foto, por cada combinación de
+  exposición y ganancia (balance de blancos fijo). La muestra y el (x, y) se cambian a mano entre
+  corridas. El análisis es el de 26.09.11 más la línea de base (pendiente 16). Archivos:
+  correr_medicion.py, correr_analisis.py, barrido_con_fotos.py y analisis_de_fotos.py.
+
 
 ======================================================================================================
 E. PENDIENTES E IDEAS
@@ -443,9 +456,9 @@ E. PENDIENTES E IDEAS
       varios campos (x, y) y parámetros de cámara (una pasada con los automáticos, otras con fijos); lo
       único fijo es el sistema óptico. Tiene que contestar qué aumentos (los "x") conviene usar por
       métrica y qué parámetros de cámara ayudan más al autofocus; ahí se ve también presencia versus
-      foco / varianza. Abiertos: el nombre final de buscar_foco_en_xy() (el comentario de
-      impresora_cosmos.py sobre viajes largos todavía nombra a posicionar_en_muestra()) y si Claude
-      escribe la aplicación de medición.
+      foco / varianza. La aplicación de medición está escrita (26.11.09, sin probar en el
+      equipo); falta medir y analizar. Abierto: el comentario de impresora_cosmos.py sobre viajes largos
+      todavía nombra a posicionar_en_muestra().
   17. buscar_foco_en_xy(), a vigilar en la medición: (a) la línea de base se contamina si
       z_arriba_seguro no está lejos del foco (5 pasos de 5 um son 25 um de unos 400 um de recorrido);
       (b) no hay piso de ruido: se podría sumar k veces el desvío de la línea de base; (c) varianza

@@ -93,7 +93,7 @@ CÓMO USAR ESTE ARCHIVO
                        regla de detección por aumento relativo a una línea de base
                        (detectar_aumento).
     busqueda_muestra.py  Combina cámara + impresora: autofocus, buscar_foco_en_xy (lleva la platina a
-                       (x, y), baja en Z y la deja en el foco confirmado; nombre provisional),
+                       (x, y), baja en Z y la deja en el foco confirmado),
                        foco_final_multimetrica. Sueltas: verificar_presencia_muestra,
                        CampoVisualSinMuestra.
                        (Franco: el nombre no representa bien lo que contiene.)
@@ -141,10 +141,11 @@ CÓMO USAR ESTE ARCHIVO
       fotografía todos los puntos y si los centra bien.
     - Borde y plano de la muestra (26.10.08): barrido en "T" y plano de enfoque aproximado.
   Siguiente
-    - Probar buscar_foco_en_xy() (hoy autofocus() da problemas). Antes, una medición larga parecida a
-      26.09.11: dos muestras, varios campos (x, y), parámetros de cámara automáticos y fijos, con el
-      sistema óptico fijo; sirve para elegir los aumentos por métrica y los parámetros de cámara que
-      más ayudan al autofocus (BITACORA.txt, pendientes 16 y 17).
+    - Medir con 26.11.09 (escrita, sin probar en el equipo): barridos con fotos en dos muestras, varios
+      campos (x, y) y combinaciones de exposición y ganancia, con el sistema óptico fijo; sirve para
+      elegir los aumentos por métrica y los parámetros de cámara que más ayudan al autofocus. Después,
+      probar buscar_foco_en_xy() en el equipo (hoy autofocus() da problemas). Ver BITACORA.txt,
+      pendientes 16 y 17.
     - Parásitos dentro de un preparado fijo; después parásitos vivos (por su movimiento).
     - Servidor web (ya funciona; se lo está llevando a una Raspberry Pi) para que el operador vea
       fotos/videos en el celular y elija la foto mejor enfocada, lo que también informa qué métrica de
@@ -158,7 +159,7 @@ CÓMO USAR ESTE ARCHIVO
   características del hardware y los umbrales que hay que leer de los base en vez de redefinir.
 
 #<<< INDICE_API (autogenerado: python herramientas/generar_indice.py -- no editar a mano) >>>
-Generado: 2026-11-09 23:14 (herramientas/generar_indice.py)
+Generado: 2026-11-09 23:54 (herramientas/generar_indice.py)
 
 camara_openmv.py -- Control de la cámara OpenMV H7 PLUS sobre el protocolo serie de texto que entiende "main_openmv.py" (el firmware corrido en la placa).
   Constantes: CLAVES_DICT_PARAMS_CAMARA
