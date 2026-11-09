@@ -1,5 +1,5 @@
 #%%
-pasada = 8
+pasada = 2
 # Agrego la raiz del proyecto
 import sys
 import os
@@ -134,6 +134,7 @@ import cv2
 import numpy as np
 from camara_openmv import OpenMVCamera, PixFormat, Framesize
 
+
 class GeneradorHDR:
     def __init__(self, camara: OpenMVCamera):
         self.cam = camara
@@ -174,7 +175,7 @@ class GeneradorHDR:
             self.cam.set_exposure(info_actual["exposure_us"])
             self.cam.set_gain(info_actual["gain_db"])
 
-            array_exp = np.linspace(0.05, 2.5, 50)
+            array_exp = np.linspace(0.05, 2.5, 25)
 
             exposiciones = exp_base * array_exp
             
@@ -247,20 +248,26 @@ class GeneradorHDR:
 # ============================================================
 
 from busqueda_muestra import (
-    DISTANCIA_XY_SIN_SUBIR_MM,
     FUNCIONES_METRICA,
     CampoVisualSinMuestra,
     PicoNoConfirmado,
     autofocus,
     bytes_a_imagen,
     intensidad_fondo,
-    moverse_a_xy,
     posicionar_en_muestra,
+    foco_final_multimetrica
+)
+
+from metricas_imagen import (
     laplacian_variance
 )
 
 from camara_openmv import OpenMVCamera
-from impresora_cosmos import TrimakerCOSMOS
+from impresora_cosmos import (
+    TrimakerCOSMOS,
+    DISTANCIA_XY_SIN_SUBIR_MM,
+    moverse_a_xy
+)
 
 
 grua = TrimakerCOSMOS("COM11"); grua.home()
@@ -275,7 +282,12 @@ posicionar_en_muestra(cam, grua, x=150, y=150,
                     z_arriba_seguro=27.9,
                     z_min_seguridad=27.5, verificar_presencia=False,
                     hacer_foco_final=True, paso_grueso=0.005,
-                    metrica_foco_final=laplacian_variance 
+                    metrica_foco_final=laplacian_variance ,
+                    criterios_deteccion={
+                        "laplacian": 12,
+                        "tenengrad": 85,#203,
+                        "varianza": 90,#165#235#100,#670,
+                    }
                     )
 
 
@@ -288,8 +300,8 @@ mejor_z, posiciones_z, valores_metrica = autofocus(
     cam,
     grua,
     laplacian_variance,
-    pasos_abajo=5,
-    pasos_arriba=5,
+    pasos_abajo=10,
+    pasos_arriba=10,
     paso_z=0.0025,
     espera_movimiento=0.5,
     graficamos=True,
@@ -299,9 +311,34 @@ mejor_z, posiciones_z, valores_metrica = autofocus(
 
 cam.config_de_una()
 # cam.config_autofoco_local()
+import time
 time.sleep(0.5)
 cam.mostrar(cam.capturar())
 grua.pregunta_posicion_actual()
+
+
+#%%
+
+
+CARPETA_SALIDA = rf"C:\BackUp\Facultad\Labo 7\Fotos"
+foco_final_multimetrica(
+    cam,
+    grua,
+    z_min_seguridad=27.5,
+    z_max_seguro=28,
+    paso_z=0.0025,
+    pasos_arriba=10,
+    pasos_abajo=10,
+    vecinos_para_confirmar=3,
+    pasos_extension_maxima=5,
+    espera_movimiento=0.5,
+    resolucion_grayscale="QVGA",
+    pixformat_color="RGB565",
+    resolucion_color="WQXGA2", #WQXGA2 QVGA  # alias: "4K"
+    guardamos=True,
+    carpeta_guardado=CARPETA_SALIDA + rf"\fotos multimetrica\gl con QVGA 1",
+    graficamos=True,
+)
 
 
 #%%
