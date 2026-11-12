@@ -27,7 +27,8 @@ Qué hay:
     puntos violetas al azar): la imagen depende de la posición (x, y) de la
     impresora, con una escala µm/px y unos signos de ejes configurables. Sirve
     para probar el centrado. Opcionalmente devuelve cuadros viejos (como una
-    cámara con el buffer sin vaciar). Agregada el 2026-10-29.
+    cámara con el buffer sin vaciar) y una textura fina (`grano`, para escalas muy
+    chicas). Agregada el 2026-10-29.
 
 Límites (lo que NO simulan): tiempos reales de movimiento, el comportamiento
 de M400/M114 del firmware Repetier (ni cuántas líneas de posición emite G28:
@@ -377,12 +378,16 @@ class CamaraFalsaConMuestra(CamaraFalsa):
     sacan cuadros como en el equipo (config_de_una descarta `skip`), que es lo
     que vacía ese buffer.
 
+    grano: desvío (en niveles de gris) de una textura fina fija que se le suma a la muestra (0 = ninguna, como antes).
+    Con escalas muy chicas (0.1 µm/px: un parche de 49 px mide 5 µm) los glóbulos solos dejan parches lisos y no
+    hay de dónde agarrarse; el grano hace de la textura que tiene una muestra real. (Agregado el 2026-11-12.)
+
     La Z no influye: la imagen siempre está enfocada.
     """
 
     def __init__(self, impresora, origen_mm=(150.0, 150.0), um_por_px_fila=0.386, um_por_px_col=0.388,
                  signo_x=1, signo_y=1, alto=240, ancho=320, lado_um=500.0, um_por_px_mundo=0.25,
-                 frames_de_retraso=0, ruido=2.0, semilla=0):
+                 frames_de_retraso=0, ruido=2.0, semilla=0, grano=0.0):
         super().__init__(impresora, z_foco=0.0, alto=alto, ancho=ancho, semilla=semilla)
         self.origen_mm = origen_mm
         self.um_por_px_fila, self.um_por_px_col = um_por_px_fila, um_por_px_col
@@ -390,6 +395,7 @@ class CamaraFalsaConMuestra(CamaraFalsa):
         self.alto, self.ancho = alto, ancho
         self.um_por_px_mundo = um_por_px_mundo
         self.frames_de_retraso = frames_de_retraso
+        self.grano = grano
         self.ruido = ruido
         self._ruido = np.random.default_rng(semilla + 1)
         self._cuadros = []
@@ -409,7 +415,14 @@ class CamaraFalsaConMuestra(CamaraFalsa):
         for _ in range(40):                                           # puntos violetas
             fila, col = (int(v) for v in generador.integers(0, n, 2))
             cv2.circle(mundo, (col, fila), max(2, int(3.0 / self.um_por_px_mundo)), (110, 40, 140), -1, cv2.LINE_AA)
-        return cv2.GaussianBlur(mundo, (0, 0), 1.0)
+        mundo = cv2.GaussianBlur(mundo, (0, 0), 1.0)
+
+        if self.grano > 0:      # textura fina fija (generador aparte: los glóbulos y los puntos quedan como sin grano)
+            fino = cv2.GaussianBlur(np.random.default_rng(semilla + 2).normal(0, 7 * self.grano, (n, n)).astype(np.float32),
+                                    (0, 0), 2.0)                       # el desvío baja a ~grano después del suavizado
+            mundo = np.clip(mundo.astype(np.float32) + fino[:, :, None], 0, 255).astype(np.uint8)
+
+        return mundo
 
     def _vista_rgb(self):
         n = self._mundo.shape[0]

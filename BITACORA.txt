@@ -396,6 +396,12 @@ D. APLICACIONES (en orden cronológico; la fecha de la carpeta es la de inicio)
   correr_medicion.py, correr_analisis.py, barrido_con_fotos.py y analisis_de_fotos.py.
 
 
+[26.11.11] Resolución y contraste -- EN PRUEBA
+  Mide resolución (ancho del borde, MTF) y contraste de glóbulos marcados en ImageJ: rayos desde el centro y
+  una ERF por rayo (el rayo se descarta si choca con un vecino). Probado con glóbulos sintéticos y con la foto
+  del construido del 2026-10-29; falta correrlo en el equipo, medir la escala con la grilla y pasar a la mesa.
+  Ojo: el CSV de ImageJ del micro de mesa viene en pulgadas (TIFF de 96 dpi): px_por_unidad=96.
+
 ======================================================================================================
 E. PENDIENTES E IDEAS
 ======================================================================================================
